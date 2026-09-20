@@ -23,18 +23,23 @@ Digital twins attempt to emulate human behavior based on historical responses. U
 ├── .gitignore                 # Files/folders to ignore in Git
 │
 ├── docs/                      # Core Design & Analysis Deliverables
-│   ├── 01_data_exploration.md # [Deliverable 1] EDA, Human Test-Retest Ceiling & Biases
+│   ├── 01_data_exploration.md # [Deliverable 1] Short answers (code: notebooks/data_exploration.ipynb)
 │   ├── 02_model_plan.md       # [Deliverable 2] Architecture, Fine-tuning, & Context Window Strategy
 │   ├── 03_eval_strategy.md    # [Deliverable 3] Metrics, Baselines, & Data Leakage Prevention
 │   ├── 04_business_apps.md    # [Deliverable 4] Use Cases, Guardrails & Ethical Boundaries
-│   ├── 05_maintenance.md      # [Deliverable 5] Long-term Maintenance, Drift, & Governance 
-│   └── 06_future_work         # [Deliverable 6] Optional note
+│   ├── 05_maintenance.md      # [Deliverable 5] Long-term Maintenance, Drift, & Governance
+│   └── 06_poc.md              # [Deliverable 6] Bonus POC slice, commands, honesty notes
 │
 ├── notebooks/                 # Exploratory Data Analysis Code
 │   └── data_exploration.ipynb # Notebook generating figures/metrics for Deliverable 1
 │
-└── src/                       # [Deliverable 6 - Bonus] Minimal Proof-of-Concept (POC)
+└── src/                       # [Deliverable 6 - Bonus] Leak-safe POC (5 modules)
+    ├── leak_test.py           # pid=1 / QID154: persona has neither 70 nor 82
     ├── data/
-    │   └── loader.py          # Hugging Face dataset loader & preprocessor
-    ├── train.py               # Fine-tuning script (<0.5B model)
-    └── evaluate.py            # Evaluation pipeline vs. trivial baselines
+    │   └── build_jsonl.py     # wave_split + CSVs → JSONL; never loads full_persona
+    ├── baselines.py           # random / majority / copy-last (copy-last never uses gold)
+    ├── train.py               # Qwen2.5-0.5B-Instruct LoRA-SFT
+    └── evaluate.py            # Baselines + optional adapter; slice MAD, not 17-task
+```
+
+POC commands: `docs/06_poc.md`. Do not load `full_persona` for prompts.

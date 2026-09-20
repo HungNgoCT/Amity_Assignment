@@ -8,9 +8,18 @@ venv/
 # Jupyter
 .ipynb_checkpoints/
 
-# Generated outputs (re-run the notebook)
+# Generated outputs (re-run the notebook / POC)
 results/
 *.xlsx
+data/poc/
+runs/
+
+# Hugging Face cache (hundreds of MB; GitHub file limit is 100MB)
+data_raw/.cache/
+
+# Office lock files / duplicate archives
+~$*
+*.zip
 
 # Secrets
 .env

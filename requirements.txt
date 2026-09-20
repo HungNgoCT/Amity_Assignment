@@ -1,0 +1,15 @@
+# Deliverable 1 (notebook)
+pandas
+numpy
+matplotlib
+seaborn
+openpyxl
+datasets
+huggingface_hub
+
+# Deliverable 6 (POC)
+torch
+transformers
+peft
+accelerate
+bitsandbytes
