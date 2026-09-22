@@ -10,12 +10,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 LEAK_PID = 1
 LEAK_COL = "QID154"
 ROUND1 = "70"
 WAVE4 = "82"
+ANSWER_KEY_RE = re.compile(
+    r"""(?ix)(?:^|[\s{"'])"""
+    r"""(?:answers?|values|selectedtext|selectedbyposition)"""
+    r"""["']?\s*:"""
+)
 
 
 def load_jsonl(path: str | Path) -> list[dict]:
@@ -41,6 +47,17 @@ def persona_span(prompt: str) -> str:
     return prompt[start:end]
 
 
+def persona_fields(prompt: str) -> dict[str, str]:
+    """Parse the builder's one-field-per-line persona representation."""
+    fields = {}
+    for line in persona_span(prompt).splitlines():
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        fields[key.strip()] = value.strip()
+    return fields
+
+
 def assert_prompts_leak_free(
     examples: list[dict],
     *,
@@ -51,6 +68,22 @@ def assert_prompts_leak_free(
     source: str = "jsonl",
     require_hit: bool = True,
 ) -> int:
+    target_cols = {str(ex["col"]) for ex in examples}
+    for ex in examples:
+        prompt = ex["prompt"]
+        fields = persona_fields(prompt)
+        leaked_cols = sorted(target_cols & fields.keys())
+        if leaked_cols:
+            raise AssertionError(
+                f"LEAK: repeated target columns are present in the no-copy persona "
+                f"({source}, pid={ex['pid']}): {leaked_cols[:5]}"
+            )
+        if ANSWER_KEY_RE.search(prompt):
+            raise AssertionError(
+                f"LEAK: prompt contains an answer-bearing key ({source}, "
+                f"pid={ex['pid']} {ex['col']})."
+            )
+
     hits = [ex for ex in examples if int(ex["pid"]) == pid and ex["col"] == col]
     if not hits:
         if not require_hit:
@@ -62,19 +95,15 @@ def assert_prompts_leak_free(
         )
     for ex in hits:
         prompt = ex["prompt"]
-        persona = persona_span(prompt)
-        if wave4 in persona:
+        fields = persona_fields(prompt)
+        if fields.get(col) == wave4:
             raise AssertionError(
                 f"LEAK trap 1: wave-4 answer {wave4} is in the persona ({source}, pid={pid} {col})."
             )
-        if round1 in persona:
+        if fields.get(col) == round1:
             raise AssertionError(
                 f"LEAK trap 2: first-round answer {round1} is in the persona ({source}, pid={pid} {col}). "
                 "Legal as copy-last baseline only, never as X."
-            )
-        if "Answers" in prompt or "Values:" in prompt:
-            raise AssertionError(
-                f"LEAK: prompt still looks like unstripped Answers/Values ({source})."
             )
     return len(hits)
 

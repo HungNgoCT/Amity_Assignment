@@ -1,120 +1,125 @@
 # Deliverable 1 — Data exploration
 
-## Questions
+## Questions addressed
 
-1. Dataset structure and the two Hugging Face subsets
+1. Dataset structure and the two Hugging Face (HF) subsets
 2. Question types and how they would be scored
 3. Sample distributions / representativeness
 4. Human test–retest reliability
 5. Biases and limitations
 
-## Solution
+## Key findings
 
-<span style="color:#2563eb;font-size:1.5em;font-weight:600">Part 1</span> is the overall summary (same numbering as the questions). <span style="color:#2563eb;font-size:1.5em;font-weight:600">Part 2</span> is only the notebook pointer (plots and the full ACS table).
-
-**References**
-
-- Toubia, O., Gui, G. Z., Peng, T., Merlau, D. J., Li, A., & Chen, H. (2025). *Twin-2K-500.* [arXiv:2505.17479](https://arxiv.org/abs/2505.17479). N=2,058; ~500 questions; wave 4 = ~2-week retest of heuristics/pricing. Figure 2: mean test–retest **accuracy** over 17 tasks = **81.72%** (accuracy = 1 − |a−b| / range; binary = exact-match).
-- Twin-2K-500 dataset card (two loadable configs; `full_persona` already uses wave-4 answers on repeats). [Hugging Face](https://huggingface.co/datasets/LLM-Digital-Twin/Twin-2K-500).
-- ACS 2023 1-year marginals: Census S0101, B01001, PEP, S1501, S1901 (bins recoded onto survey options in the notebook).
-- https://github.com/tianyipeng-lab/Digital-Twin-Simulation
-
-<h2 style="color:#2563eb;font-size:1.5em;font-weight:600">Part 1 — Overall summary</h2>
-
-| Key finding | In one line |
+| Key finding | Description |
 |---|---|
-| Leakage trap | `full_persona` text/json already store the wave-4 answer on repeats (pid=1 / `QID154` = **82**). Modeling input = `wave_split`. |
-| Test–retest ceiling | Paper Figure 2: **81.72%** mean accuracy over 17 tasks (1 − \|a−b\| / range). Empirical 2-week self-agreement, not a theoretical max. |
-| Representativeness | Described as representative; ACS 2023: gender/region ≈; education, age, income gaps **> 5 pp**. |
-| Scoring per type | No pooled exact-match. MC accuracy; multi-select **Jaccard**; slider MAD + MAE. System headline = paper MAD (D3). |
-| Biases | Online panel; social desirability; ceiling is **two weeks**; wave-4 NaNs are mostly assignment, not attrition. |
+| Leakage trap | `full_persona` contains wave-4 answers for repeated items. Use `wave_split`, remove answers from wave-4 question payloads, and retain them only as prediction targets. |
+| Test–retest benchmark | Paper Figure 2 reports **81.72% mean human test–retest accuracy across 17 tasks**. The assignment calls this a ceiling, but it is an empirical short-term benchmark rather than a mathematical maximum. |
+| Representativeness | Gender/sex and region are close to 2023 Census benchmarks, but education, age, and income contain gaps above **5 percentage points**. |
+| Scoring per type | Use metrics appropriate to each response type. For comparison with the paper, report range-normalized accuracy rather than pooling exact match across all items. |
+| Biases / limitations | Online-panel self-selection, completion and self-report bias, limited geographic/time scope, and structured missingness from experimental assignment. |
+
+## Detailed findings
 
 1. **Dataset structure / two HF subsets.**
 
-   Twin-2K-500 = four-wave US survey. On Hugging Face, `load_dataset` has **two subsets**: `full_persona` and `wave_split`. Catalog/CSVs, LLM dumps, and raw Qualtrics are separate files.
+   Twin-2K-500 = four-wave US survey. On Hugging Face, `load_dataset` has **two subsets**: `full_persona` and `wave_split`. Other dataset artifacts—including the catalog, comma-separated value (CSV) response files, large language model (LLM) outputs, and raw Qualtrics exports—are provided as separate files.
 
-   `full_persona` = table (**2058 rows × 4 columns**).
-   - 2058 = US adults in the final sample (one row = one person).
-   - Row = `pid`. What we predict is that person's item responses, not a population share. Scoring unit = `(pid, item)` (D2).
-   - 4 columns = `pid`; `persona_text` (~126k–134k characters); `persona_summary` (~12k–18k); `persona_json`.
-   - `persona_text` / `persona_json` = **item-level Q–A** (same survey; json is structured, text is prose). They **merge waves 1–3 and wave 4** into one profile. On questions asked twice, wave 4 **replaces** the earlier answer (dataset card). The card also says json follows the same structure as `persona_text`. On this row, `persona_text` looks like the prose rendering of `persona_json`.
-   - `persona_summary` = a narrative, not a shortened Q–A dump (card: “concise summary of key characteristics”). Empirically (pid=1, same template on the first few pids): demographics, computed scale scores + percentiles (Big Five, CRT, games, literacy, …), plus a few qualitative self-descriptions. It is **not** a column on `wave_split`.
-   - Check **one pid / one item** (pid=1 / `QID154`; CSV wave 1–3 = **70**, wave 4 = **82**; not swept across pids):
-     - `persona_json` has `Values: ['82']` — wave-4 label, leak.
-     - `persona_text` has `Answer: 82` on that slider — same leak (our read of this row, matching the json).
-     - `persona_summary` does **not** contain 82 (or 70) on this item. Deliverable 2 still checks other wave-4 items / pids before using it as a persona.
+   **`full_persona`** = table (**2,058 rows × 4 columns**), with one row per participant identifier (`pid`) and their survey responses.
+   - 4 columns = `pid`; `persona_text` (~126k–134k characters); `persona_summary` (~12k–18k characters); `persona_json`.
+   - The dataset card describes `persona_text` and `persona_json` as item-level survey Q–A in prose and structured JavaScript Object Notation (JSON) formats. Both merge waves 1–3 with wave 4 into one profile; for repeated questions, wave 4 replaces the earlier answer.
+   - For the first few participants inspected, `persona_summary` is a prose profile containing demographics, derived scores, and selected self-descriptions—not a question-by-question response list. It is available only in `full_persona` and **not** a column on `wave_split`.
+   - Spot check: For **pid=1**, the earlier `QID154` response in waves 1–3 was 70, while the wave-4 response was 82. Both `persona_json` (`Values: ['82']`) and `persona_text` (`Answer: 82`) contain the wave-4 response, so they would leak the prediction target. `persona_summary` does not expose this item in this example, but one case is insufficient to establish that it is leakage-safe.
 
-   Assignment task = waves 1–3 → held-out wave 4. Do not use `full_persona.persona_text` / `persona_json` as that persona: on repeated items they already store the wave-4 answer. `wave_split` is the modeling interface (already split in time). Do not reconstruct the split from `full_persona`.
+   The assignment predicts held-out wave-4 responses from waves 1–3. Therefore, the modeling data should be constructed from **wave_split**: use waves 1–3 as the persona, remove answers from the wave-4 questions, and retain those answers only as prediction targets. `full_persona.persona_text` and `full_persona.persona_json` are unsuitable because repeated items already contain their wave-4 answers.
 
-   `wave_split` = table (**2058 rows × 5 columns**).
-   - Same 2058 people, split in time (`pid`s match; cast `full_persona.pid` from string to int before joining).
-   - 5 columns: `pid`; `wave1_3_persona_text`, `wave1_3_persona_json` (persona from waves 1–3); `wave4_Q_wave4_A` (wave-4 questions + answers = labels); `wave4_Q_wave1_3_A` (same questions with the **first** answer = test–retest / copy-last). No `persona_summary`.
+   **`wave_split`** = table (**2,058 rows × 5 columns**), with one row per participant. Its fields separate earlier responses from the later retest:
+   - **pid**: participant identifier.
+   - **wave1_3_persona_text** and **wave1_3_persona_json**: responses from waves 1–3, represented as text and structured JSON.
+   - **wave4_Q_wave1_3_A**: held-out questions paired with the participant’s earlier answers, used to measure test–retest consistency.
+   - **wave4_Q_wave4_A**: those questions paired with the participant’s wave-4 answers—the prediction targets.
 
-   Tabular files (not `load_dataset` configs): `question_catalog.json` (256 QuestionIDs); `wave1_3_response.csv` **(2058, 761)** = pid + 760 items; `wave4_response.csv` **(2058, 127)** = pid + 126 items; plus label CSVs, LLM simulation dumps, raw Qualtrics. Same question text on wave 4 is the paper’s retest, not a leak; putting **70** or **82** in the prompt is the leak (Deliverable 3).
+   Additional files outside the two Hugging Face configs include:
+   - **question_catalog.json**: metadata for 256 QuestionIDs.
+   - **wave1_3_response.csv**: 2,058 participants × 760 response columns, plus pid.
+   - **wave4_response.csv**: 2,058 participants × 126 response columns, plus pid.
+
+   The dataset also provides label-form CSVs, precomputed LLM outputs, and anonymized raw Qualtrics exports. These additional artifacts were not used in the analyses below.
 
 2. **Question types and scoring.**
 
-   One survey, three counts (not three datasets):
+   The dataset has three different counts because they refer to different units:
 
    | Count | What it counts |
    |---|---|
-   | **256** | Catalog QuestionIDs (Qualtrics blocks) |
-   | **~500** | Questions a person actually answers (paper / dataset name) |
-   | **760** | CSV data columns after expanding matrix rows and multi-select options |
+   | **256** | QuestionIDs in the catalog; one QuestionID may contain several sub-items |
+   | **~500** | Questions administered across waves 1–3 |
+   | **760** | Response columns after matrix rows and multi-select options are expanded |
 
-   Types (by QuestionID): MC **175** · Matrix **36** · TE **28** · DB **14** · Slider **3**.
+   The full catalog contains **175 Multiple Choice (MC)**, **36 Matrix**, **28 Text Entry (TE)**, **14 Display/Instruction (DB)**, and **3 Slider** QuestionIDs. The held-out wave-4 set contains **84 QuestionIDs**: 68 MC, 7 Matrix, 6 TE, and 3 Slider; DB screens are not prediction targets. A response column is mapped to its question type through the catalog's `csv_columns` field.
 
-   How we score:
-   - MC single-select (154) → accuracy
-   - MC multi-select (21) → **Jaccard** as the type headline; per-option F1 as diagnostic (not single-label accuracy). Gold is a **set** of options, so ordinary accuracy is the wrong unit; both give partial credit (miss 1 of 5 ≠ miss all 5). The **system** headline is still paper MAD (D3), not Jaccard.
-   - Matrix → MAD / ordinal MAE
-   - Slider → MAD + native MAE (exact-match is the wrong headline). MAD is comparable to the paper’s 17-task ceiling; native MAE (points on 0–100) is the miss size in the slider’s own units. We keep both; they answer different questions.
-   - TE numeric / anchoring → native MAE (EDA; same idea as slider). Unbounded anchoring in the **paper** is MAD after **deciles** (they fit bins on wave 2). **Train-only** cuts are a D3 rule so the test set cannot move the bins — not a dataset field.
-   - DB (instructional) → exclude
+   Proposed scoring by question type:
+   - **154 single-choice MC QuestionIDs:** exact-match accuracy—the predicted option either matches or does not (e.g., target = option 3, prediction = option 3 → correct).
+   - **Multi-select MC (21):** Jaccard similarity measures the overlap between the predicted and selected option sets (e.g., target = `{A, C}`, prediction = `{A, B}` → overlap `{A}` divided by combined set `{A, B, C}` = **1/3**). Per-option F1 can be reported as a diagnostic.
+   - **Ordered Matrix responses:** ordinal mean absolute error (MAE)—the average distance between the predicted and target scale values—and a range-normalized accuracy score (e.g., target Likert score = 5, prediction = 3 → error = **2 points**).
+   - **Slider:** MAE in the original scale and range-normalized accuracy (e.g., `QID154`: wave-4 target = 82, prediction = 70 → MAE = **12** and normalized accuracy = **0.88**). Exact match is too strict for a 0–100 slider.
+   - **Numeric TE / anchoring:** MAE; following the paper, unbounded numerical answers are converted into ten ordered groups (deciles) before scoring. Two answers in the same decile have zero decile distance. Free-form text is not part of the held-out wave-4 item set and would require a separate scoring rubric.
+   - **DB:** instruction-only screens with no response columns, such as a page explaining the study procedure, so they are excluded.
 
-   Join a CSV column to its type via catalog `csv_columns`. Model headline = paper MAD (D3), not one pooled exact-match.
+   The main metric used to compare the model with the paper's **81.72% human test–retest consistency across 17 tasks** is range-normalized accuracy: `1 − |prediction − target| / response range`. A score of 1 means an exact match; lower scores mean larger errors. The type-specific metrics above are also reported to show where the model performs well or poorly. Full evaluation details are in Deliverable 3.
 
 3. **Distributions / representativeness.**
 
-   Assignment / HF card: “representative sample of N = 2,058 US adults.” That is their description. Below is the ACS 2023 check (our EDA), not a verdict that the sample is or is not “representative.”
+   The paper and dataset card describe the final sample as representative of U.S. adults. Recruitment used a Prolific online panel with quotas for age, sex, and ethnicity. To examine this claim, the exploratory data analysis (EDA) compares the sample's unweighted demographic shares with 2023 U.S. Census benchmarks, primarily the American Community Survey (ACS). This comparison is a diagnostic, not proof that the sample is or is not representative.
 
-   Gender and census region ≈ ACS 2023.
+   Gender/sex and census-region shares are within **2.5 percentage points** of the Census benchmarks. I flag absolute gaps above **5 percentage points** as descriptively important; this is a reporting threshold, not a statistical significance test.
 
-   Gaps **> 5 pp** (sample − ACS):
-   - college / some postgrad **+13.9**
-   - high school only **−12.7**
-   - income $100k+ **−11.0**
-   - less than high school **−9.4**
-   - age 65+ **−9.1**
-   - age 50–64 **+8.2**
-   - income $30k–$50k **+5.7** (ACS does not split at $30k; this bin is interpolated from the $25–35k ACS row — same as the notebook)
+   **More common in the sample than in the Census benchmark (overrepresented):**
+   - College graduate / some postgraduate: **+13.9 percentage points**
+   - Age 50–64: **+8.2**
+   - Family income $30k–$50k: **+5.7**
 
-   The measured marginals are uneven on education, age, and income. Sampling frame = online panel, not a census draw.
+   **Less common in the sample than in the Census benchmark (underrepresented):**
+   - High-school education only: **−12.7 percentage points**
+   - Income $100k+: **−11.0**
+   - Less than high-school education: **−9.4**
+   - Age 65+: **−9.1**
+
+   These comparisons are approximate: ACS education statistics cover adults aged 25+, while this survey includes ages 18–24; ACS reports household income, whereas the survey asks about family income; and the $30k income boundary is interpolated from ACS bins.
+
+   Recruitment also used an ethnicity quota, but this EDA did not add an external race/ethnicity benchmark. Alignment on that dimension therefore remains unverified rather than being inferred from the quota.
+
+   Overall, gender and region align reasonably well, but education, age, and income do not. The sample should therefore be treated as a quota-based U.S. online panel, not as a census draw.
 
 4. **Human test–retest (the important number).**
 
-   Wave 4 = same heuristics/pricing items, ~**two weeks** later.
-   **126 / 760** wave 1–3 CSV columns are asked again — that overlap is the **item set** on which we measure person-vs-self agreement, **and** the leak surface if those first-round values enter the model input. The agreement number on that set is the **human test–retest ceiling**: empirical 2-week consistency, not a theoretical maximum. A model should not be expected to match a later answer more consistently than the person matches themselves (noise / leak aside).
+   Wave 4 was launched approximately **two weeks after wave 3** and repeats heuristics, behavioral-economics, and pricing items from across waves 1–3. Because the repeated items originated in different waves, the elapsed time may be longer for items first administered earlier. In the standardized CSVs, **126 of the 760** waves 1–3 response columns also appear in wave 4. For each participant and repeated item, the earlier answer can therefore be compared with the later answer.
 
-   People vs themselves (our EDA, type-appropriate — not MAD):
-   - MC exact-match **~0.74**
-   - Matrix **~0.60**
-   - Slider **~0.12** (MAE ~15.5 / 100)
-   - TE **~0.25**
+   This comparison measures how consistently a person answers the same item over time. It provides the empirical **human test–retest benchmark** for the prediction task. The earlier answer is also the copy-last prediction. It is withheld from the primary no-copy model input, but Deliverables 2 and 3 also define a separately reported full-history condition in which this temporally valid waves 1–3 answer is explicitly available. The two conditions must not be pooled.
 
-   Do not average those four into one “accuracy.”
-   Paper (Figure 2): mean **test–retest accuracy** over 17 tasks = **81.72%**, where accuracy = 1 − |a−b| / range (binary = exact-match; repo name: MAD accuracy). We did not recompute that number here; the four rates above are our EDA. A twin should *approach* the paper figure, not beat it.
+   Descriptive results from my EDA (not the paper's overall score):
+   - **MC:** exact-match rate ≈ **73.5%**.
+   - **Matrix:** exact-match rate ≈ **60.3%**; mean ordinal error ≈ **0.52 scale points**.
+   - **Slider:** mean absolute error ≈ **15.5 points** on a 0–100 scale. Exact match is only ≈ **12.0%**, which is too strict to use as the headline.
+   - **Numeric TE:** exact-match rate ≈ **25.3%**; this is only a diagnostic because the questions use different numerical scales.
+
+   These values use different units and should not be averaged into one accuracy number.
+
+   Paper Figure 2 reports a mean human test–retest accuracy of **81.72% across 17 tasks**. For binary items, this is exact match. For bounded numerical items, accuracy is `1 − |earlier answer − wave-4 answer| / response range`; unbounded anchoring answers are first converted to deciles. I did not recompute the official 17-task result here. It is an empirical short-term benchmark rather than a mathematical maximum; a model that unexpectedly exceeds it should trigger a leakage audit.
 
 5. **Biases / limitations.**
 
-   - Panel self-selection (habitual survey-takers; almost no < high school).
-   - Social-desirability on self-report (risk, honesty, spend).
-   - The test–retest ceiling is **two weeks**, not months.
-   - Snapshot in time (HF card).
-   - Wave-4 missingness is mostly **between-subject assignment**, not dropout (same 2,058 pids in both CSVs). So missingness in wave 4 should not automatically be read as longitudinal attrition.
+   - **Selection and completion bias:** The dataset card warns of self-selection bias, and the paper reports that recruitment used Prolific. The final sample contains the 2,058 people who completed all four waves, down from 2,509 wave-1 completions. This may make the final sample differ from people who do not join online panels or who did not complete every wave. My ACS comparison also finds that people with less than high-school education are strongly underrepresented.
+   - **Self-report bias:** The dataset card warns of social-desirability bias and states that survey responses may not accurately reflect actual behavior or characteristics. The dataset should therefore be interpreted as reported survey responses, not observed behavior.
+   - **Short and limited retest:** Wave 4 was launched approximately two weeks after wave 3, although items first administered in earlier waves have a longer interval. The retest covers only repeated heuristics, behavioral-economics, and pricing tasks. It does not establish consistency over months or years, or for the personality and demographic questions that wave 4 did not repeat.
+   - **Time and geographic scope:** The dataset card describes a specific time and geographic context; the paper reports a U.S. panel surveyed from January to February 2025. Results may not generalize to other countries, periods, or populations.
+   - **Structured wave-4 missingness:** My EDA finds the same 2,058 final-sample `pid`s in both response CSVs. Many blank wave-4 cells arise because between-subject experiments assign each participant to only one condition, not because that participant dropped out. Evaluation should score only non-null assigned items. This item-level missingness is separate from the reduction from 2,509 wave-1 completions to the 2,058-person final sample.
 
----
+## Reproducibility
 
-<h2 style="color:#2563eb;font-size:1.5em;font-weight:600">Part 2</h2>
+Reproducible code, plots, and full tables: [notebooks/data_exploration.ipynb](../notebooks/data_exploration.ipynb).
 
-Plots and full ACS table: `notebooks/data_exploration.ipynb`.
+## References
+
+- Toubia, O., Gui, G. Z., Peng, T., Merlau, D. J., Li, A., & Chen, H. (2025). *Twin-2K-500: A Dataset for Building Digital Twins of over 2,000 People Based on Their Answers to over 500 Questions*. [arXiv:2505.17479](https://arxiv.org/abs/2505.17479).
+- LLM-Digital-Twin. *Twin-2K-500 dataset card and data files*. [Hugging Face](https://huggingface.co/datasets/LLM-Digital-Twin/Twin-2K-500).
+- U.S. Census Bureau. *2023 American Community Survey 1-Year Estimates*: [S0101](https://data.census.gov/table/ACSST1Y2023.S0101) (age), [B01001](https://data.census.gov/table/ACSDT1Y2023.B01001) (sex), [S1501](https://data.census.gov/table/ACSST1Y2023.S1501) (education), and [S1901](https://data.census.gov/table/ACSST1Y2023.S1901) (income); [2023 Population Estimates Program](https://www.census.gov/programs-surveys/popest.html) (region). Benchmark recoding is documented in `notebooks/data_exploration.ipynb`.

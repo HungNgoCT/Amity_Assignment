@@ -1,197 +1,264 @@
 # Deliverable 2 — Concrete plan to build the behavior model
 
-This is a **build plan**, not a trained production model. We adapt a public instruction-tuned LLM to Twin-2K-500; we do not pretrain a transformer from scratch.
+This document describes the model I would build, not a claim that the complete system has already been trained. The goal is to adapt a public instruction-tuned language model to predict one participant's held-out wave-4 response from a leakage-safe representation of that participant's waves 1–3 data.
 
-**How to read this note.** Part 1 lists the major steps and the core ideas (including the trade-off in step 9). Part 2 unpacks each step — pipeline, hyperparameters, and risks. EDA: `notebooks/data_exploration.ipynb`. Metrics: Deliverable 3.
+This is a full-scale plan for a longer-term research project with sufficient time and compute for systematic data validation, model training, ablation studies, and error analysis. It is intentionally broader than the optional Deliverable 6 proof of concept (POC). Because the take-home assignment is time-limited, that POC uses a model below 0.5B parameters and a smaller data slice to demonstrate that the leakage-safe training and evaluation pipeline works end to end. It does not attempt to implement or validate every component of the 7B-scale research plan below.
 
-**References**
+The central design is:
 
-- Toubia, O., Gui, G. Z., Peng, T., Merlau, D. J., Li, A., & Chen, H. (2025). *Twin-2K-500.* [arXiv:2505.17479](https://arxiv.org/abs/2505.17479). Figure 2: mean test–retest accuracy **81.72%** over 17 tasks; GPT-4.1-mini twins **71.72%**; paper-stated ratio **87.67%**. Those three figures are as published; 71.72÷81.72 of the *rounded* percentages is not 87.67. We did not recompute them.
-- Twin-2K-500 dataset card (`wave_split` vs `full_persona`). [Hugging Face](https://huggingface.co/datasets/LLM-Digital-Twin/Twin-2K-500).
+1. Use `wave_split`, not `full_persona`.
+2. Represent each example as one `(participant, held-out response column)` pair.
+3. Report two explicit input conditions: a primary **no-copy** condition that excludes earlier answers to repeated wave-4 items, and a **full-history** condition that treats those waves 1–3 answers as historical inputs.
+4. Compress the remaining persona with a deterministic summary and retrieval over safe persona blocks.
+5. Establish a frozen prompting baseline, then train a shared 7B-scale model with supervised fine-tuning (SFT) using Quantized Low-Rank Adaptation (QLoRA).
+6. Evaluate against wave-4 ground truth, trivial baselines, and human test–retest using the protocol in Deliverable 3.
 
----
+The model is shared across participants; it is not one separately trained model or adapter per person.
 
-## Part 1 — Summary of steps
+## 1. Problem framing
 
-1. **Frame the task.** Condition on a person’s waves 1–3 persona → predict their **wave 4** answers → score against wave 4 and against the human 2-week test–retest ceiling.
+**Unit of prediction.** One example is one `(pid, response column)` pair, where `pid` is the participant identifier: a leakage-safe persona, one held-out wave-4 question, and one target answer. A response column (for example, `QID154` or `QID287_1`) is the scoring unit; one Qualtrics QuestionID may expand into several response columns.
 
-2. **Build a leakage-safe dataset.** Use Hugging Face `wave_split`, never `full_persona`. Strip `Answers` from wave-4 questions before they enter the prompt. Do not put first-round answers to the same items (`wave4_Q_wave1_3_A`, or the 126 overlapping CSV columns) into the model input. Split by **person** (70 / 15 / 15). Sanity check: pid=1, `QID154` — the prompt must contain neither **70** (round 1) nor **82** (wave 4). **Trap 1** = wave-4 label in the persona (`full_persona` / unstripped `Answers` → 82). **Trap 2** = wave 1–3 answer to the *same* item used as a feature (70).
+The held-out set contains **126 response columns** mapped through the catalog's `csv_columns` field to **84 QuestionIDs**: 68 Multiple Choice (MC), 7 Matrix, 6 Text Entry (TE), and 3 Slider. Display/Instruction (DB) screens have no response columns and are excluded. These are exploratory data analysis (EDA) counts, not figures reported by the paper.
 
-3. **Try methods cheap → expensive.** (1) Frozen prompting + a short persona summary, as a baseline (or the dataset’s precomputed LLM CSVs). (2) Retrieve only the persona *blocks* relevant to the question being asked — full persona text is too long. (3) LoRA fine-tune a **&lt; 0.5B** instruct model (`Qwen2.5-0.5B-Instruct`) — this is the actual “build.” (4) DPO only after SFT already emits parseable codes.
+**Two interpretations of the historical answers.** The assignment can reasonably be read in two ways. An earlier answer to the same question is temporally valid waves 1–3 history, not a future-label leak. However, allowing it creates a strong copy-last shortcut and changes the question from whether the model can infer an unseen response from the rest of the persona to whether it can update a known prior response. I would therefore report both conditions and never mix them within one result:
 
-4. **Fit the context window.** Never dump 130k characters of persona. Use a structured summary + top-k retrieved blocks. One training example = **one** wave-4 item, not 88 items concatenated.
+- **No-copy (primary):** use the provided `wave1_3_persona_json` or `wave1_3_persona_text`, which separates the repeated target-item answers, plus non-overlapping waves 1–3 response columns. This tests prediction from the rest of the persona.
+- **Full-history (secondary):** additionally expose the source-tagged earlier answers from `wave4_Q_wave1_3_A` or the 126 overlapping waves 1–3 columns. This follows the literal “all waves 1–3 history” interpretation. It must be compared with copy-last, especially on items where the participant changed their answer.
 
-5. **Write down a runnable SFT recipe.** LoRA, loss on answer tokens only, ~2 epochs, Colab/RunPod. Deliverable 6 (bonus), if we do it, is this recipe on a data slice — it may be weak; it may not be leaky or unrunnable.
+For a controlled comparison, I would train and evaluate separate checkpoints for the two conditions while holding participant splits, target rows, and other hyperparameters fixed. Copy-last uses information unavailable to the no-copy model, so it is a diagnostic reference there; it becomes a direct trivial baseline for full-history.
 
-6. **Evaluate on the same yardsticks we will use for the model** (detail in D3). Headline: paper-style MAD accuracy. Diagnostics by question type. Compare to random, majority, **copy last answer**, and the human ceiling. Beating the human ceiling is a leak alarm, not a win.
+Both conditions may use:
 
-7. **Name the risks.** Trap 1, trap 2, tiny-model underfit, between-subject missingness, context truncation. Mitigations live in Part 2.
+- The wave-4 question text, options, and response range after all answer fields have been removed.
 
-8. **If we had more time.** Same recipe on 7B–8B, then DPO against “copy last answer,” then reproduce Toubia et al. Figure 2 in official MAD units.
+I would not use any field from `full_persona`, including `persona_summary`, until a systematic sweep established that it contains no wave-4-derived information.
 
-9. **Trade-off analysis.** Order is **prompt → retrieve → SFT → DPO** because each step only pays for what the previous one cannot do: prompting is a cheap, leak-safe baseline (Toubia et al. already saw similar scores across prompt tricks, so we do not bet on prompt engineering); retrieval exists only to fit a 130k-character persona into a small context window; LoRA-SFT is the actual “build” (bind persona to a short answer code without pretraining from scratch); DPO comes last, to penalize “copy last round,” and only after SFT already emits parseable codes. **Not RLHF:** reward design across 126 heterogeneous columns is out of take-home scope, and RLHF without a working SFT parse loop is theatre. **Not `full_persona`:** it already substitutes wave-4 labels (pid=1 / `QID154` stores **82**, not 70). Detail: **§2.3–2.5**.
-
----
-
-## Part 2 — Implementation details
-
-### 2.1 Problem framing
-
-**Unit of prediction.** One `(pid, wave-4 item)` pair. An item is a CSV column (e.g. `QID154`, `QID287_1`), not a Qualtrics QuestionID. Wave 4 has **126** scored CSV columns. Join via catalog `csv_columns` ∩ `wave4_response.csv` (not `startswith(QuestionID)`): those 126 columns map to **84** QuestionIDs (MC 68 · Matrix 7 · TE 6 · Slider 3). Instructional `DB` QIDs have empty `csv_columns`, so they are **not** in this 84. We counted this in EDA; it is not a paper table.
-
-**Allowed input.** `wave_split.wave1_3_persona_json` / `wave1_3_persona_text`, and/or `wave1_3_response.csv` columns **not** in the wave-4 set. `full_persona.persona_summary`: 82 absent on **this one pid/item** (pid=1 / `QID154`); not yet swept across pids — verify other hold-out items before using it.
-
-**Forbidden as model condition.**
+**Always forbidden as model input.**
 
 | Field | Why |
 |---|---|
-| `full_persona.persona_text` / `persona_json` | Dataset card: repeated questions carry **wave-4** answers; json follows the same structure as text. Empirically **this row** (pid=1 / `QID154`): json `Values: ['82']`; text has `Answer: 82`. |
-| `full_persona.persona_summary` | Checked **one pid / one item** only (pid=1 / `QID154`): **82 is not in the summary**. Not swept across pids. Verify other wave-4 items before using it as a persona. |
-| `wave4_Q_wave4_A` **with `Answers` left in** | Same JSON is prompt **and** label. HF usage says to strip `Answers`. Raw use leaks 82. |
-| `wave4_Q_wave1_3_A` as a feature for the **same** item | First-round answer (70). Legal as copy-last-answer **baseline** and test–retest; illegal as persona. |
-| 126 CSV columns in both `wave1_3_response.csv` and `wave4_response.csv` | Tabular form of the same first-round hold-out. |
+| `full_persona.persona_text` / `persona_json` | Repeated questions already contain wave-4 answers. For pid 1, `QID154` stores the wave-4 value 82 rather than the earlier value 70. |
+| `full_persona.persona_summary` | Only one participant/item has been inspected. Absence of 82 in that example does not establish that the field is safe. |
+| `wave4_Q_wave4_A` with `Answers` left in | The target would appear directly in the question payload. |
 
-**Output.** Canonical codes as in `wave4_response.csv`, not free prose.
+The same question text appearing in wave 4 is expected and is not leakage. A wave-4 **answer** entering either condition is leakage. An earlier same-item answer is permitted only in the explicitly labeled full-history condition; accidentally including it in a no-copy run is a condition-contamination error, not future-label leakage.
 
-**“Good.”** Systematically beating 2-week human test–retest is treated as leak/overfit. Toubia et al. (2025, Figure 2): GPT-4.1-mini twins **71.72%**; test–retest ceiling **81.72%**; paper-stated ratio **87.67%**, not 100%. We did not recompute. Target: beat trivial baselines, approach the ceiling, keep the leakage unit test green.
+**Output.** The model returns a canonical answer code or number matching the schema used by `wave4_response.csv`, not an explanation in free prose.
 
-Toubia et al. (2025): persona = non-hold-out waves 1–3; evaluation vs retest blocks are separate; headline metric is MAD 1 − |a−b| / range (deciles on unbounded anchoring).
+**Success.** The model should beat question-only and population baselines and approach the empirical human test–retest benchmark without suspicious above-benchmark behavior. Metrics, baselines, confidence intervals, and acceptance criteria are specified in Deliverable 3.
 
 ---
 
-### 2.2 Data pipeline
+## 2. Data pipeline
 
 ```text
-HF wave_split + catalog + CSVs
+Pinned wave_split revision + question catalog + response CSVs
         │
-        ├─ persona: wave1_3_persona_json
-        │     drop any question whose csv_columns intersect wave-4 columns
-        ├─ ask: wave4_Q_wave4_A  → deep-copy, delete Answers / Values / Selected*
-        ├─ label: wave4_response.csv[pid, col]
-        └─ diagnostics (never in X):
-              wave4_Q_wave1_3_A, overlap columns in wave1_3_response.csv
+        ├─ identify the 126 held-out response columns through csv_columns
+        ├─ split unique pids into train / validation / test
+        ├─ extract and source-tag the earlier repeated-item responses
+        │     copy-last / test–retest: always retain as comparison data
+        ├─ build the waves 1–3 input under one declared policy
+        │     no-copy: exclude the 126 earlier repeated-item responses
+        │     full-history: include those source-tagged earlier responses
+        ├─ build one question payload
+        │     deep-copy wave4_Q_wave4_A and recursively remove answer fields
+        └─ isolate label = wave4_response.csv[pid, column]
 ```
 
-Join types via catalog field `csv_columns`, never `col.startswith(QuestionID)` (`QID290_5` would hit `QID2` / `QID29`).
+Wave-4 labels remain isolated in every condition. The earlier responses remain available for copy-last and test–retest comparisons even when they are also exposed as source-tagged history in the full-history condition.
 
-**Person split.** Shuffle `pid`s, seed `20250319`, **70 / 15 / 15** (~1,440 / 309 / 309). All wave-4 items for a person stay in one split.
+**Schema mapping.** I would build an explicit `response_column → QuestionID → type/options/range/block` index from `question_catalog.json`. Prefix matching is unsafe because, for example, `QID290_5` could be incorrectly matched to `QID2` or `QID29`.
 
-**Between-subject items.** Train/eval only on `(pid, col)` with a non-null wave-4 label. Do not impute the unseen arm.
+**Participant split.** Shuffle unique `pid`s with seed `20250319` and split them **70% / 15% / 15%** into train, validation, and test sets. All items for one participant stay in one split. This tests generalization to unseen people and prevents the model from seeing other wave-4 labels from a test participant during training.
 
-**Canonicalization.** JSON `Answers` → CSV codes (1-based option index; sliders 0–100; multi-select `{QID}_{option}`). SFT target = that short code.
+**Row construction.** Create a row only when the wave-4 target is non-null. Null cells produced by between-subject assignment are not negative labels and are never imputed. The training sampler should balance across tasks or response columns so large matrix blocks do not dominate the objective.
 
-**Leakage unit test (before any train/eval claim).**
+**Canonical targets.**
 
-```text
-pid=1, column=QID154
-  CSV w1–3 = 70, CSV w4 = 82
-  Assert 82 not in persona / prompt
-  Assert 70 not in persona / prompt
-  Assert stripped test question has no Answers
-```
+- Single-choice MC: one legal option code.
+- Matrix: one code for each expanded matrix response column.
+- Slider: a number within the catalog range.
+- Numeric TE: the raw numeric response; decile conversion is evaluation-only.
+- Multi-select, if later included: either one binary target per expanded option column or a canonical sorted list, chosen once and used consistently.
 
-70 present → trap 2. 82 present → trap 1 / unstripped `wave4_Q_wave4_A`.
+**Leakage gates.** These checks run before training and before every evaluation:
 
-**Artifacts.** `data/poc/splits/pids_{train,val,test}.json`, `data/poc/overlap_columns.txt`, `src/data/build_jsonl.py` → JSONL `{pid, col, prompt, target}` plus `diag_*.jsonl` (copy-last only) and `leak_fixture.jsonl`.
+- Train, validation, and test pid sets are disjoint.
+- In a no-copy run, no question object whose `csv_columns` intersect the held-out set is used to build a persona summary or retrieval index.
+- In a full-history run, every repeated-item answer is explicitly tagged as coming from waves 1–3, and no value from `wave4_Q_wave4_A` or `wave4_response.csv` can enter the summary or retrieval index.
+- Before a wave-4 question is added to the model prompt, create a **stripped question**: a copy with every field containing the participant's answer removed, including `Answers`, `Values`, `SelectedText`, and `SelectedByPosition`. The stripped question keeps only the question text, response options or range, and other non-answer metadata.
+- For pid 1 / `QID154`, the no-copy input contains neither the earlier answer 70 nor the wave-4 target 82. The full-history input may contain the source-tagged earlier answer 70 but must never contain 82. Because the question stem may independently contain the number 70 as scenario text, these assertions operate on parsed answer fields rather than global substrings.
+- Wave-4 labels and copy-last predictions are stored separately from model inputs; any earlier values used by full-history come from a versioned, source-tagged historical feature table.
 
----
-
-### 2.3 Modeling approaches — order and why
-
-Toubia et al. found a dozen prompt / format / light-FT variants landed in a **similar** band. Do not bet the take-home on a clever prompt. Keep a prompting baseline so a 0.5B SFT model can be compared honestly.
-
-**Frozen prompting + compression (baseline).** Hosted instruct model, or skip API cost and use the dataset’s precomputed LLM simulation CSVs. Prompt = compressed persona + one stripped wave-4 question + “code/number only.” First because it costs no GPU and forces the leak-safe prompt to exist. Not last: the assignment asks how we would *build*, including fine-tuning.
-
-**Retrieval over persona blocks.** Split JSON by `BlockName`. Embed once per pid (`gte-small` or BM25). For a target item, retrieve top-k blocks vs. `(BlockName + QuestionText)`. Full persona is 126k–134k characters; 0.5B cannot hold it. Retrieval is a **pipeline feature**, not a product: it packs prompts for both frozen and SFT models.
-
-**LoRA-SFT (the build, and the bonus POC).** Base: **`Qwen/Qwen2.5-0.5B-Instruct`** (fallback `SmolLM2-360M-Instruct`). Not from-scratch pretraining: the data are small and structured; we need to bind a persona to a short code. Not full FT: it overfits 2k people and wrecks instruction following. Loss = causal LM on **answer tokens only**. Target e.g. `82` or `3`.
-
-A tabular MLP on the 634 non-overlap columns is a cheap neural **baseline**. It cannot take a new natural-language question, so it is not the LBM.
-
-**DPO after SFT works.** Chosen = gold CSV code; rejected = random legal code, or the wave 1–3 answer when it differs from wave 4 (teaches “don’t just copy last time”). Full RLHF/GRPO is out of scope. DPO before a working parse loop is theatre.
-
-**Sequence.** Leak test + JSONL → prompting baseline → majority / copy-last / MLP → LoRA-SFT on a slice (500 pids × ≤20 items) → scale SFT if healthy → DPO only if SFT loses to copy-last on items humans actually changed.
+I would version the dataset revision, catalog hash, split pid lists, input condition, preprocessing configuration, and prompt template so every model checkpoint can be traced to the exact data contract that produced it.
 
 ---
 
-### 2.4 Long personae and the context window
+## 3. Modeling approaches — order and why
 
-| Stage | Budget | Packing |
-|---|---|---|
-| Frozen API model | Prefer ≤ 8k tokens in | Structured summary + 3–5 retrieved blocks |
-| 0.5B SFT (`max_length=2048`) | ~1.5k prompt + 8 answer | Always summary + retrieval; never raw `wave1_3_persona_text` |
-| 70B / 128k (if we had it) | Still retrieve | Length is not a license to dump hold-out answers |
+I would advance from low-cost baselines to trainable models. Each stage answers a specific question before more compute is committed.
 
-**Summary (deterministic).** 400–800 words from non-overlap tabular columns: demographics, political items, Big Five facet means, Need for Cognition, selected cognitive scores. Do not dump 44 raw BFI rows unless retrieval picked that block.
+**1. Frozen prompting.** Start with a capable instruction-tuned model using a safe compressed persona, one stripped question, and an explicit output schema. The dataset's precomputed large language model (LLM) simulations provide a reference without paying for external model calls. This establishes whether the data contract and prompt are useful before training.
 
-**One item per example.** Concatenating 88 wave-4 questions would let later items condition on earlier gold/predicted wave-4 answers inside the same sequence.
+**2. Summary plus retrieval.** Add the deterministic summary and retrieve relevant safe persona blocks. Begin with BM25, a keyword-based text-ranking algorithm (Robertson & Zaragoza, 2009), because it is transparent and cheap; compare it with a small dense embedding model only if lexical retrieval misses semantically related blocks. The retrieval policy is shared by frozen prompting and fine-tuning.
+
+**3. QLoRA supervised fine-tuning—the main build.** Fine-tune **`Qwen/Qwen2.5-7B-Instruct`** (Qwen Team, 2024) as the primary open model using QLoRA (Dettmers et al., 2023). A 7B model is large enough to reason over heterogeneous survey questions while still being practical to adapt in 4-bit precision. The objective is causal language modeling with loss only on the answer tokens. I would train one shared model conditioned on the persona rather than one adapter per participant.
+
+**Why 7B rather than the largest available model?** A 70B–90B model may improve general language reasoning, but it does not automatically improve person-specific prediction: performance may instead be limited by persona quality, retrieval errors, the 2,058-participant sample, and genuine test–retest variation. A 7B model can be adapted on a single 24–48 GB graphics processing unit (GPU), making it feasible to run the retrieval, hyperparameter, and persona-shuffling ablations needed to verify that the model actually uses individual information. I would scale to 14B, 32B, or 70B only if the validation scaling curve indicates that model capacity—not the data pipeline—is the bottleneck. A vision-oriented 90B model would also add capacity that this text-only survey task does not use.
+
+I would compare this with one smaller model, such as `Qwen2.5-1.5B-Instruct`, to measure the quality/compute trade-off. A model below 0.5B is appropriate for the optional bonus POC, but it would not be my primary architecture for the full behavior model.
+
+**4. Preference tuning only if error analysis justifies it.** Direct Preference Optimization (DPO) is optional, not part of the default path. I would consider it only after SFT produces reliably parseable answers and evidence shows a specific preference failure, such as repeatedly choosing an attractive but invalid response format. Preference pairs would be constructed from train-split examples only: the canonical ground-truth answer is the chosen response and an observed incorrect or invalid SFT sample is the rejected response. For short categorical targets, constrained decoding and supervised training may solve the problem more directly.
+
+A tabular multilayer perceptron (MLP) over safe non-overlap columns is a useful neural baseline, but it is not the proposed behavior model because it cannot naturally answer a newly worded question.
+
+**Experiment order.** Question-only prompt → summary prompt → summary + BM25 retrieval → summary + dense retrieval → QLoRA SFT → optional preference tuning. An ablation at each step shows whether extra complexity produces measurable value.
+
+**Key trade-offs.**
+
+- I would not pretrain from scratch: 2,058 participants are far too few to learn general language and reasoning capabilities.
+- I would prefer QLoRA to full fine-tuning: it reduces memory and checkpoint cost and lowers the risk of damaging the base model's instruction-following behavior.
+- I would not train one model per participant: each person provides too little data, and the resulting system could not generalize to a new participant.
+- I would not rely on raw long-context prompting: it is expensive, difficult to audit, and likely to dilute the relevant evidence.
+- I would not start with reinforcement learning from human feedback (RLHF) or Group Relative Policy Optimization (GRPO): the dataset supplies ground-truth answers, not human preference labels, so supervised learning is the direct objective.
 
 ---
 
-### 2.5 Training details (SFT POC)
+## 4. Long personae and the context window
+
+The raw persona text is approximately 126k–134k characters, so placing it directly in every prompt would be expensive, difficult to audit, and likely to bury relevant evidence. A long context window does not remove those problems.
+
+**Deterministic summary.** Build a compact summary under the declared input condition. Both conditions may summarize safe non-overlap fields such as stable demographics, aggregate psychological-scale scores computed from permitted items, broad preferences, and selected cognitive measures. In full-history, repeated-item answers may be added in a separately labeled historical section; they remain absent in no-copy. Store field provenance with every summary value so it can be audited. Budget: approximately **400–600 tokens**.
+
+**Retrieval index.**
+
+1. Apply the declared input condition before indexing: remove the 126 earlier repeated-item responses for no-copy, or retain and source-tag them for full-history.
+2. Split `wave1_3_persona_json` by `BlockName`; split oversized blocks into smaller question–answer chunks.
+3. Index chunks separately for each participant.
+4. Query with the held-out question text, options, and catalog block name.
+5. Retrieve **3–5 chunks**, deduplicate them, and pack them after the deterministic summary.
+
+BM25 is the first retriever because survey terminology often repeats exactly and its matches are easy to inspect. A dense retriever is adopted only if validation ablations show a gain.
+
+**Planned training sequence budget: 4,096 tokens.** This is an initial engineering choice, not a fixed requirement of the dataset or model. It can be reduced when GPU memory or training throughput is constrained, or increased when hardware permits and validation experiments show that additional retrieved context improves prediction. Any change must remain within the base model's context limit, and the component budgets should be retuned without truncating the question or output schema.
+
+| Component | Approximate budget |
+|---|---:|
+| System instruction and output schema | 150 tokens |
+| Deterministic persona summary | 600 tokens |
+| Retrieved persona chunks | 2,700 tokens |
+| Question, options, and range | 500 tokens |
+| Target answer | 16 tokens |
+
+The target allocation is the supervised label during training and reserved generation space during inference. It is not part of the inference prompt.
+
+**Hardware fit.** With a 7B model in 4-bit QLoRA, gradient checkpointing, and a micro-batch of 1, the 4,096-token plan is intended to fit on a single 24 GB GPU such as an RTX 3090/4090-class card. A 48 GB GPU provides more headroom for a micro-batch of 2, faster kernels, and fewer out-of-memory adjustments. On a GPU below 24 GB, I would initially reduce the sequence budget to 2,048 tokens or retrieve fewer persona chunks; CPU offloading is possible but substantially slower. These are planning estimates because actual memory use also depends on the training library, attention implementation, precision, and optimizer, so I would confirm the final batch and sequence settings with a short memory-profiling run.
+
+If the complete training sequence exceeds the budget, truncate the lowest-ranked retrieved chunk first; never truncate the question or output schema, and never silently reintroduce fields excluded by the declared input condition.
+
+**One held-out response per example.** Do not concatenate all available wave-4 items for a participant. During training, later items could otherwise see earlier gold answers in the same sequence; during inference, errors could cascade between items.
+
+---
+
+## 5. Training details
+
+Here and below, mean absolute deviation (MAD) accuracy refers to the paper's range-normalized accuracy metric used for model selection and evaluation.
 
 | Knob | Value | Rationale |
 |---|---|---|
-| Base | `Qwen/Qwen2.5-0.5B-Instruct` | Instruct, &lt; 0.5B, Apache-2.0 |
-| Method | LoRA on `q,k,v,o,gate,up,down_proj` | Standard decoder LoRA |
-| Rank / alpha / dropout | 16 / 32 / 0.05 | Rank 8 underfits short codes; 64 wastes T4 VRAM |
-| Quantization | NF4 QLoRA if GPU &lt; 16 GB; bf16 LoRA if 24 GB | Free Colab = T4 16 GB |
-| Objective | Token CE, **labels = -100 on prompt** | Score answers, not persona parroting |
-| Max length | 2048 | Fits T4; forces §2.4 compression |
-| Batch / accum | 4 × 8 (effective 32) | Stabilize 0.5B |
-| LR / schedule | 2e-4, cosine, 3% warmup | LoRA wants higher LR than full FT |
-| Epochs | 2 (early-stop on val MAD) | 5+ memorizes train pids |
-| First POC size | 500 pids × ≤ 20 items (~10k rows) | Loop must run, not SOTA |
-| Seed | 42 | Repro |
-| Decode | greedy, stop at newline | Illegal parse → miss |
+| Base model | `Qwen/Qwen2.5-7B-Instruct` | Strong open instruction model with an Apache-2.0 license and manageable QLoRA cost |
+| Adaptation | 4-bit NormalFloat (NF4) QLoRA | Fits a 7B model on a single 24–48 GB GPU without full-model updates |
+| Low-Rank Adaptation (LoRA) targets | Attention and MLP projection layers | Gives the adapter capacity to use persona and question information |
+| Rank / alpha / dropout | 16 / 32 / 0.05 | Conservative starting point; tune rank 8 vs 16 on validation |
+| Objective | Causal token cross-entropy with prompt labels set to `-100` | Trains the answer rather than reconstructing the persona |
+| Sequence length | 4,096 tokens | Fits the packing budget in §4 |
+| Micro-batch / accumulation | `1 × 32` or `2 × 16`; effective batch = 32 | Choose the pair that fits GPU memory while preserving the same effective batch size |
+| Learning rate | `1e-4`, cosine schedule, 3% warmup | Reasonable QLoRA starting point; compare with `2e-4` on validation |
+| Epochs | Initial trial: 3; initial search range: 1–5 | Evaluate after every epoch and retain the checkpoint with the best validation 17-task person-equal MAD accuracy. Stop after two evaluations without an improvement above a predeclared minimum tied to validation uncertainty; extend beyond 5 only while validation continues to improve without a widening train–validation gap and the additional compute cost remains justified |
+| Precision | bfloat16 (bf16) compute on supported GPUs; 16-bit floating point (fp16) otherwise | Stable mixed-precision training |
+| Seed | 42 for training; fixed data-split seed from §2 | Separates model randomness from split generation |
+| Repeated runs | One seed for screening; three seeds for finalists | Avoids selecting an architecture from one unusually favorable training run |
+
+Training uses the model's official chat template. Rows are sampled by task or response column rather than uniformly from the expanded table, preventing large matrix blocks from dominating. I would log both training loss and validation metrics, but select checkpoints using Deliverable 3's validation 17-task person-equal MAD accuracy rather than token loss alone.
 
 ```text
-You are simulating one survey respondent.
-Persona:
-{compressed_persona}
+System:
+Predict how this survey participant would answer the question.
+Return exactly one answer in the required schema.
+
+User:
+Participant summary:
+{safe_summary}
+
+Relevant prior responses:
+{retrieved_safe_chunks}
 
 Question:
-{stripped_question_text}
-Options: {options_or_range}
+{stripped_question}
 
-Reply with only the answer code or number.
+Allowed response:
+{legal_codes_or_numeric_range}
+
+Assistant:
+{target}
 ```
 
-Target: CSV value as string (`82`). Stack: `transformers` + `peft` + `SFTTrainer`, `bitsandbytes` if QLoRA. Script for D6: `src/train.py`. Compute: assignment’s Colab/RunPod credits; &lt; 2 h on a T4 for the POC slice.
+At inference time, decoding is greedy and schema-constrained where possible: MC outputs are restricted to legal codes, sliders are parsed and range-validated, and invalid outputs are counted as failures rather than silently dropped. The generated explanation is suppressed because the evaluation target is the answer, not a rationale.
+
+**NOTE**: The optional bonus POC applies the no-copy version of the same objective to a model strictly below 0.5B parameters and a smaller data slice. That prototype is a demonstration of the loop, not the primary architecture proposed here.
 
 ---
 
-### 2.6 Evaluation (preview — full spec in D3)
+## 6. Evaluation preview
 
-Do **not** headline a single exact-match average across sliders and yes/no items.
+Model selection and final reporting follow Deliverable 3. The important design constraints for training are:
 
-1. **Headline (paper-comparable):** MAD 1 − |ŷ−y| / range; anchoring deciles from **train** percentiles only. Ceiling = same MAD, wave 1–3 hold-out vs wave 4 (published task-average **81.72%**).
-2. **Diagnostics:** MC accuracy + κ; multi-select Jaccard; slider native MAE **and** MAD; numeric TE MAE.
+- Split by participant and use validation only for model/retrieval/hyperparameter choices.
+- Report no-copy and full-history results separately; never combine their rows or compare them as if they used the same information.
+- Use the official paper-compatible MAD ranges and task mapping for the headline result.
+- Report type-specific diagnostics instead of pooling exact match across incompatible response scales.
+- Compare against question-only, train-majority, random, copy-last, frozen prompting, and the human test–retest benchmark.
+- Compare normal predictions with a persona-shuffling ablation; if performance does not fall, the model is not meaningfully using individual-level information.
+- Report parse rate and count invalid generations as failures.
+- In no-copy results, use the earlier same-item answer only for copy-last and human test–retest comparisons. In full-history results, it is an explicitly labeled historical feature, and performance must also be reported on the subset where the earlier and wave-4 answers differ.
 
-Baselines: uniform random, train majority, **copy wave 1–3**, prompting, tabular MLP.
-
-On the **full** scored set, ceiling and copy-last are the **same number** (ŷ = the wave 1–3 answer), read two ways: human self-consistency vs a trivial model. Random and majority sit below that number. Do not beat the ceiling. Where the LBM must beat copy-last is the **subset of items that changed** (D3).
+The paper reports **81.72% mean human test–retest accuracy across 17 tasks**. This is an empirical short-term benchmark, not a mathematical upper bound. A model that unexpectedly exceeds it should trigger a leakage and aggregation audit before the result is interpreted.
 
 ---
 
-### 2.7 Risks and mitigations
+## 7. Risks and mitigations
 
 | Risk | Mitigation |
 |---|---|
-| Label leak (`full_persona` / unstripped `Answers`) | Never load `full_persona` for prompts; unit test pid=1 `QID154` |
-| Trap 2 in X | Drop list of 126 names; copy-last is a **named baseline**, not a feature |
-| 0.5B << GPT-4.1-mini on heuristics | POC bar = runnable + beat random; production = same recipe on 7B–8B LoRA |
-| Truncation drops demographics | Structured summary **first** in the prompt; truncate retrieved blocks, not the summary |
-| Between-subject NaNs treated as dropout | Score only non-null labels; report n per column |
-| Concatenated wave-4 items | One item per example |
-| Invented MAD ranges | Reuse official `mad_accuracy_evaluation.py` ranges via `wave4_formatted_to_catalog_mapping.json` |
-| Val MAD &gt; human ceiling | Fail the leak test first; do not report as SOTA |
-| Social-desirability / panel bias | Cannot be trained away; scope in D4/D5 |
+| Wave-4 label enters the persona or question payload | Use only `wave_split`; recursively strip answer fields; enforce structural leakage tests before train/eval |
+| Earlier-answer policy is mixed across runs | Store `input_condition=no_copy|full_history` in every data and model artifact; apply condition-specific structural tests |
+| Retrieval selects irrelevant blocks | Compare question-only, summary-only, BM25, and dense retrieval on validation; inspect retrieved block IDs |
+| Important stable attributes are truncated | Place the deterministic summary first and truncate the lowest-ranked retrieved chunks |
+| Large matrix tasks dominate training | Sample by task/column and report the training distribution |
+| Between-subject nulls are treated as labels | Train and score only assigned, non-null cells; never impute an unseen condition |
+| The model emits illegal codes or prose | Use the official chat template, explicit legal responses, constrained decoding, and strict parsing |
+| Overfitting to 2,058 participants | Split by participant, use QLoRA rather than full fine-tuning, select on validation, and test once |
+| A high score is caused by leakage or aggregation error | Run leakage gates, inspect per-column results, and reproduce the result with the official evaluation mapping |
+| Survey and panel biases are learned by the model | Document scope, report subgroup diagnostics, and apply the guardrails in Deliverables 4 and 5 |
 
 ---
 
-### 2.8 If we had more time
+## 8. If I had more time
 
-LoRA-SFT 7B/8B on the full pid split; DPO with rejected = last-round answer when it differs; per-block adapters (pricing vs heuristics); prove `persona_summary` leak-free before using it; reproduce Toubia et al. Figure 2 on **our** split with the official MAD script.
+1. Compare 1.5B, 7B, and 14B models under the same persona and retrieval pipeline.
+2. Train a supervised retriever using validation performance rather than semantic similarity alone.
+3. Test separate adapters or routing for pricing, heuristics, and survey-scale tasks.
+4. Calibrate predictive uncertainty and allow abstention when the persona contains little relevant evidence.
+5. Evaluate temporal drift using a later data wave rather than only a short retest interval.
+6. Consider DPO only for a clearly observed failure that supervised training and constrained decoding do not solve.
 
-Deliverable 6, if implemented, is only the slice SFT in §2.3 / §2.5.
+## References
+
+- Toubia, O., Gui, G. Z., Peng, T., Merlau, D. J., Li, A., & Chen, H. (2025). *Twin-2K-500: A Dataset for Building Digital Twins of over 2,000 People Based on Their Answers to over 500 Questions*. [arXiv:2505.17479](https://arxiv.org/abs/2505.17479).
+- LLM-Digital-Twin. *Twin-2K-500 dataset card*. [Hugging Face](https://huggingface.co/datasets/LLM-Digital-Twin/Twin-2K-500).
+- Toubia et al. *Digital-Twin-Simulation reference implementation*. [GitHub](https://github.com/tianyipeng-lab/Digital-Twin-Simulation).
+- Robertson, S., & Zaragoza, H. (2009). *The Probabilistic Relevance Framework: BM25 and Beyond*. Foundations and Trends in Information Retrieval, 3(4), 333–389. [https://doi.org/10.1561/1500000019](https://doi.org/10.1561/1500000019).
+- Dettmers, T., Pagnoni, A., Holtzman, A., & Zettlemoyer, L. (2023). *QLoRA: Efficient Finetuning of Quantized LLMs*. [arXiv:2305.14314](https://arxiv.org/abs/2305.14314).
+- Qwen Team. (2024). *Qwen2.5 Technical Report*. [arXiv:2412.15115](https://arxiv.org/abs/2412.15115).

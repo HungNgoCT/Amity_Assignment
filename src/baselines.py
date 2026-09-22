@@ -6,15 +6,25 @@ import random
 from collections import defaultdict
 
 
+def answer_code_map(train_examples: list[dict]) -> dict[str, list[str]]:
+    """Observed train-only answer codes for each scored column."""
+    values: dict[str, set[str]] = defaultdict(set)
+    for ex in train_examples:
+        values[ex["col"]].add(str(ex["target"]))
+    return {col: sorted(codes) for col, codes in values.items()}
+
+
 def random_preds(
     examples: list[dict],
-    col_ranges: dict[str, tuple[float, float]],
+    valid_codes: dict[str, list[str]],
     rng: random.Random,
 ) -> dict[tuple[int, str], str]:
     out = {}
     for ex in examples:
-        lo, hi = col_ranges.get(ex["col"], (0.0, 1.0))
-        out[(int(ex["pid"]), ex["col"])] = str(int(round(rng.uniform(lo, hi))))
+        codes = valid_codes.get(ex["col"])
+        if not codes:
+            continue
+        out[(int(ex["pid"]), ex["col"])] = rng.choice(codes)
     return out
 
 

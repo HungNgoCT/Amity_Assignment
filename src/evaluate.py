@@ -15,13 +15,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import random
 from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
 
-from src.baselines import apply_majority, copy_last_preds, majority_map, random_preds
+from src.baselines import (
+    answer_code_map,
+    apply_majority,
+    copy_last_preds,
+    majority_map,
+    random_preds,
+)
 from src.leak_test import assert_prompts_leak_free, load_jsonl
 
 SEED = 42
@@ -51,6 +58,7 @@ def score(
     examples: list[dict],
     preds: dict[tuple[int, str], str],
     col_ranges: dict[str, tuple[float, float]],
+    valid_codes: dict[str, list[str]] | None = None,
 ) -> dict:
     per_person: dict[int, list[float]] = defaultdict(list)
     per_type: dict[str, list[float]] = defaultdict(list)
@@ -58,22 +66,36 @@ def score(
     n_total = 0
     n_parsed = 0
     for ex in examples:
-        n_total += 1
         key = (int(ex["pid"]), ex["col"])
         pred = preds.get(key)
         y_true = to_float(ex["target"])
         y_pred = to_float(pred) if pred is not None else None
-        if y_true is None:
+        if y_true is None or not math.isfinite(y_true):
             continue
-        if y_pred is None:
-            continue
-        n_parsed += 1
+        n_total += 1
         lo, hi = col_ranges.get(ex["col"], (0.0, 1.0))
-        acc = 1.0 - abs(y_pred - y_true) / (hi - lo)
+        allowed = {
+            code
+            for code in (to_float(v) for v in (valid_codes or {}).get(ex["col"], []))
+            if code is not None and math.isfinite(code)
+        }
+        valid_pred = (
+            y_pred is not None
+            and math.isfinite(y_pred)
+            and (valid_codes is None or y_pred in allowed)
+        )
+        if valid_pred:
+            n_parsed += 1
+            acc = max(0.0, 1.0 - abs(y_pred - y_true) / (hi - lo))
+            exact = 1.0 if y_pred == y_true else 0.0
+        else:
+            # Keep invalid/missing outputs in the fixed denominator.
+            acc = 0.0
+            exact = 0.0
         per_person[int(ex["pid"])].append(acc)
         qtype = ex.get("qtype") or "Unknown"
         per_type[qtype].append(acc)
-        per_type_ex[qtype].append(1.0 if str(pred) == str(ex["target"]) else 0.0)
+        per_type_ex[qtype].append(exact)
     means = [float(np.mean(v)) for v in per_person.values() if v]
     return {
         "slice_mean_mad": float(np.mean(means)) if means else float("nan"),
@@ -103,8 +125,19 @@ def model_preds(examples: list[dict], adapter_dir: str) -> dict[tuple[int, str],
     model.eval()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(device)
+    print(
+        f"Generating on {len(examples)} items, greedy, one-by-one "
+        f"({device}). First step is CUDA warmup — it can sit quiet for 1–2 min.",
+        flush=True,
+    )
+    try:
+        from tqdm import tqdm
+
+        iterator = tqdm(examples, desc="lora gen")
+    except ImportError:
+        iterator = examples
     out = {}
-    for ex in examples:
+    for i, ex in enumerate(iterator, start=1):
         inputs = tokenizer(
             ex["prompt"] + "\n", return_tensors="pt", truncation=True, max_length=2048
         ).to(device)
@@ -117,6 +150,8 @@ def model_preds(examples: list[dict], adapter_dir: str) -> dict[tuple[int, str],
             )
         text = tokenizer.decode(gen[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         out[(int(ex["pid"]), ex["col"])] = text.strip().split("\n")[0].strip()
+        if not hasattr(iterator, "update") and i % 50 == 0:
+            print(f"  {i}/{len(examples)}", flush=True)
     return out
 
 
@@ -153,18 +188,19 @@ def main() -> None:
 
     rng = random.Random(SEED)
     ranges = train_ranges(train)
+    valid_codes = answer_code_map(train)
     print("[range] train-only empirical max-min. Not official mad_accuracy_evaluation.py → not verified.\n")
 
     diag = load_diag(Path(args.diag_jsonl))
     ceiling_preds = copy_last_preds(test, diag)
-    ceiling = score(test, ceiling_preds, ranges)
+    ceiling = score(test, ceiling_preds, ranges, valid_codes)
     ceiling_mad = ceiling["slice_mean_mad"]
     print("copy-last and ceiling are the same pairs on this slice (D3 §2.2).\n")
 
     print("=== Baselines ===")
-    rand_scores = score(test, random_preds(test, ranges, rng), ranges)
+    rand_scores = score(test, random_preds(test, valid_codes, rng), ranges, valid_codes)
     maj = majority_map(train)
-    maj_scores = score(test, apply_majority(test, maj), ranges)
+    maj_scores = score(test, apply_majority(test, maj), ranges, valid_codes)
     print_row("random", rand_scores, ceiling_mad)
     print_row("train_majority", maj_scores, ceiling_mad)
     print_row("copy_last", ceiling, ceiling_mad)
@@ -183,7 +219,7 @@ def main() -> None:
     if args.adapter_dir:
         print("\n=== LoRA ===")
         mp = model_preds(test, args.adapter_dir)
-        ms = score(test, mp, ranges)
+        ms = score(test, mp, ranges, valid_codes)
         print_row("lora_sft", ms, ceiling_mad)
         if ms["slice_mean_mad"] > ceiling_mad:
             print("WARNING: slice MAD > copy-last/ceiling. Leak alarm — do not report as SOTA.")

@@ -1,57 +1,51 @@
 # Deliverable 4 — Business applications
 
-## Questions
+## Requirements addressed
 
-1. What the model’s job is
-2. Which products / organizations can use this
-3. What it must **not** be used for
+1. The model's concrete job
+2. Products and organizations that could use it
+3. Uses that must remain out of scope
 
-## Solution
+## Proposed business applications
 
-Part 1 is the overall summary (same numbering as the questions). Part 2 is the detail.
+The summary follows the same numbering as the requirements above, followed by detailed use cases and guardrails.
 
-**References**
+### Application summary
 
-- Toubia, O., Gui, G. Z., Peng, T., Merlau, D. J., Li, A., & Chen, H. (2025). *Twin-2K-500: A dataset for building digital twins of over 2,000 people based on their answers to over 500 questions.* [arXiv:2505.17479](https://arxiv.org/abs/2505.17479). Intended uses and limits: Introduction (pilot experiments; customer insight / product development); Conclusion (US / social-science scope; risks of dehumanizing research and over-reliance on AI).
-- Twin-2K-500 dataset card, **Considerations for Using the Data** — Social Impact, Discussion of Biases, Other Known Limitations. [Hugging Face](https://huggingface.co/datasets/LLM-Digital-Twin/Twin-2K-500).
-- Sample vs ACS 2023 gaps: `notebooks/data_exploration.ipynb` §4, §7.
+1. **Job.** Condition on one participant's leakage-safe waves 1–3 survey answers and predict a **survey response code** for one Twin-2K-500-style item. Score the prediction against a later **survey response**, not observed behavior. This is a survey-response twin, not a complete person twin. The dataset card states that responses are **self-reported** and “may not always accurately reflect actual behaviors”; the paper evaluates twins against a survey retest, not clickstream or purchase data.
 
-### Part 1 — Overall summary
+2. **Products and organizations.** Three concrete product concepts fit the demonstrated capability. A **survey and experiment pretesting tool** would help academic labs, survey teams, and user-experience (UX) researchers generate hypotheses about candidate questions or stimuli before a human pilot. A **customer-research sandbox** would help product and insights teams explore pricing, heuristics, or values close to the observed survey battery when designing a real study. A **behavior-model evaluation platform** would help artificial intelligence (AI) labs and survey-methodology researchers compare prompting, retrieval, and fine-tuning methods against human test–retest and trivial baselines. These products produce research hypotheses and directional evidence, not decision-grade population estimates. The assignment and dataset card describe the sample as representative, but comparison with the 2023 American Community Survey (ACS) still shows age, education, and income gaps. This does not justify presenting the model as a simulation of the entire U.S. population.
 
-1. **Job.** Condition on a consenting adult’s prior survey answers (waves 1–3, leakage-safe) → predict a **survey code** for one Twin-2K-500-style item. Score against a later **survey**, not against observed behavior. Survey twin, not person twin. The HF card states responses are **self-reported** and “may not always accurately reflect actual behaviors”; the paper scores twins against **survey** retest, not clickstream or purchase.
-
-2. **Who uses it.** The card’s Social Impact and the paper’s Introduction name two buyers: **researchers** (theory development, experimental design, silicon-sample pilots) and **practitioners** (customer insights, product development). Operationally, survey / UX / product-research teams **pretest wording** on a twin panel, then still run a human pilot. Insights teams run a **first-pass** only on constructs close to this battery (pricing, heuristics, values) — directional, not a board number. Not banks, HR, clinics, or targeting desks. Described as representative (assignment / card); ACS 2023 still shows gaps (under 65+, under low education, over college). That description is not a license to sell “the US public.”
-
-3. **Guardrails (do not).** No credit, insurance, hiring, medicine, legal, or individual targeting — the paper warns against **excessive reliance on AI in decision-making**. No impersonating the person (dehumanizing research). No selling per-person twin files. No deploying off this sample without new data (card: **specific geographic context**; paper: US-focused). No treating codes as what people *do* (card: self-selection + social-desirability bias; self-report ≠ behavior). No pitching scores above the human 2-week ceiling (D3: leak alarm). Charts that leave the lab: **simulated survey response, not observed behavior.**
+3. **Guardrails (do not).** Do not use the model for credit, insurance, hiring, medicine, legal decisions, public-benefit eligibility, or individual targeting. The paper warns against excessive reliance on AI in decision-making, and a risk-based deployment policy should keep these high-impact uses out of scope (National Institute of Standards and Technology, 2023). Do not impersonate participants, productize participant-level twin files, deploy to a different population without new human validation, treat predicted survey codes as observed behavior, or claim causal effects from twin-only experiments. An unexpectedly above-benchmark result is an audit trigger, not a marketing claim. Any chart shared outside the research team must say: **simulated survey responses, not observed behavior**.
 
 ---
 
-### Part 2 — Detail
+### Detailed applications and guardrails
 
 #### 2.1 Job of the model
 
-| | In | Out |
+| Aspect | Within scope | Outside scope |
 |---|---|---|
-| **Input** | Leakage-safe persona (`wave_split` waves 1–3); one stripped catalog item | `full_persona`; first-round answer to the *same* item as a feature |
+| **Input** | Leakage-safe `wave_split` persona under a declared no-copy or full-history policy; one stripped catalog item | `full_persona`; an unstripped wave-4 payload; silently mixing the two input policies |
 | **Output** | Canonical survey code (option index, 0–100 slider, …) | “Will buy / will vote / is risky”; a prose biography |
 | **Ground truth** | A later **survey** answer (paper: wave-4 retest) | Clickstream, purchase, clinical outcome |
-| **Horizon we measured** | ~2 weeks (paper wave 4; D1/D3) | Months/years (card: “specific point in time”) |
+| **Horizon evidenced** | Short-term retest: wave 4 launched approximately two weeks after wave 3; items originating in waves 1–2 have longer intervals | Reliable prediction over months or years |
 
-Toubia et al. (2025, Figure 2): twins **71.72%**; test–retest ceiling **81.72%**; paper-stated ratio **87.67%** (not 71.72÷81.72 of those rounded percentages; we did not recompute). That is not evidence the twin is the person. Copy-last already wins on stable items; the model is only useful where people **change** — wave 4 mostly *repeats* heuristics/pricing, so “any new question” is not what we showed.
+Toubia et al. (2025, Figure 2) report full-sample twins at **71.72%**, human test–retest at **81.72%**, and a stated ratio of **87.67%**; these published figures were not recomputed here. They do not establish that a twin is the person. In the full-history condition, incremental value over copy-last is clearest on items where the participant changed their answer. The no-copy condition asks a different question: whether the rest of the persona predicts the held-out response without the same-item earlier answer. Wave 4 primarily repeats heuristics and pricing tasks, so this evidence does not support claims about arbitrary new questions.
 
 ---
 
-#### 2.2 Products / organizations
+#### 2.2 Product concepts and organizations
 
-Mapped to the card’s Social Impact and the paper’s Introduction — not invented verticals.
+The following products directly answer what could use the model's capabilities and how. The first two are grounded in the customer-insight, product-development, pilot-experiment, and experimental-design uses named by the paper and dataset card; the third operationalizes the dataset's role as a testbed for persona-model research.
 
-| Use | Organization | What they do | Output they act on | Source |
-|---|---|---|---|---|
-| **Questionnaire / experiment pretest** | Academic labs; survey, UX, product research | Compare two wordings or stimuli on the same twin panel | Which wording is noisier / more polarized. Then a **human** pretest before fielding | Paper: silicon samples for **pilot experiments** and experimental design. Card: researchers, theory development |
-| **First-pass customer insight** | Insights / product teams already on pricing, heuristics, values | Ask items **close to** this battery to design the real instrument | Directional ranking, not market share; not an external report | Paper + card: **customer insights** and **product development** |
-| **Methods / academic** | A lab (this take-home) | Twin vs human vs copy-last vs ceiling, by question type | When an LBM adds value | Paper: public **testbed** for LLM persona simulations |
+| Product concept | Primary organizations | Workflow | Output and decision boundary |
+|---|---|---|---|
+| **Survey and experiment pretesting tool** | Academic labs; survey, UX, and product-research teams | Submit candidate questions or stimuli, run them on the same simulated panel, and identify differences worth investigating | Hypotheses about wording or stimulus effects to verify in a **human** pretest; not a substitute for randomized human evidence |
+| **Customer-research sandbox** | Product and insights teams working on pricing, heuristics, or values | Explore items close to the observed survey battery before designing the real questionnaire or study | Directional patterns and candidate questions; not market share, demand forecasts, or a decision-grade external estimate |
+| **Behavior-model evaluation platform** | AI labs and survey-methodology researchers | Compare prompting, retrieval, and fine-tuning against human test–retest, train-majority, random, and copy-last baselines by question type | Reproducible evidence about when a Large Behavior Model (LBM) adds predictive value; not a claim that a twin is the person |
 
-**Who this is *not* for, even as a customer.** A buyer whose population is not this panel (non-US, 65+, low education, people who do not take web surveys) should collect a new persona survey and re-evaluate — not “fine-tune and ship.” Card: geographic context. Paper: US / social-science scope is a limitation. Versus ACS 2023 (our EDA, not the card): 65+ 13.5% vs 22.6%; less than high school 0.8% vs 10.2%; high school only 13.2% vs 25.9%; college / some postgrad 35.7% vs 21.8%; income $30k–$50k 20.0% vs 14.3% (ACS bin interpolated; notebook).
+**Who this is *not* for, even as a customer.** A buyer whose population is not this panel (non-U.S., 65+, low education, or people who do not take web surveys) should collect a new persona survey and re-evaluate rather than “fine-tune and ship.” The dataset card identifies geographic context as a limitation, and the paper describes a U.S.-focused social-science scope. In the Deliverable 1 EDA, compared with ACS 2023 (U.S. Census Bureau, 2023): 65+ is 13.5% vs 22.6%; less than high school is 0.8% vs 10.2%; high school only is 13.2% vs 25.9%; college / some postgraduate is 35.7% vs 21.8%; and income $30k–$50k is 20.0% vs 14.3%. These comparisons are approximate: ACS education covers adults aged 25+, the survey includes ages 18–24, ACS reports household income while the survey asks about family income, and the $30k ACS boundary is interpolated.
 
 ---
 
@@ -61,13 +55,23 @@ Mapped to the card’s Social Impact and the paper’s Introduction — not inve
 |---|---|
 | Credit, insurance, hiring, medical, legal, welfare | Individual high-stakes action. Paper conclusion: **excessive reliance on AI in decision-making**. Paper also: twins diverged from humans on **medical** (outcome / omission bias) and **political** items |
 | Individual / political targeting | Panel ≠ voter file; survey ≠ behavior |
-| Impersonation (twin *is* the user) | Consent was to a survey, not a stand-in. Paper: risk of **dehumanization of research** |
-| Selling per-`pid` twin files | Re-identification on a 2k psychometric panel |
-| Pitch “US representative” or off-sample deploy | Assignment / card use that description; ACS 2023 marginals differ on education, age, income. Card: specific **geographic context**. Paper: US-focused |
-| Pitch “we beat the human ceiling” | D3 treats that as leak, not SOTA |
-| Treat answers as revealed behavior | Card **Discussion of Biases:** self-selection, social desirability. Card **Other Known Limitations:** self-report may not reflect actual behavior. D1 §7 |
-| Train other models on twin outputs as labels | Launders survey bias |
+| Impersonation (twin *is* the participant) | The dataset documentation does not establish consent for impersonation or automated decision-making. Paper: risk of **dehumanization of research** |
+| Productizing or distributing per-participant twin files identified by `pid` | Rich demographic and psychometric profiles create linkage and re-identification risk even when direct identifiers are removed (National Institute of Standards and Technology, 2020) |
+| Pitch “U.S. representative” or deploy off-sample | Assignment and card use that description; ACS 2023 marginals differ on education, age, and income. Card: specific **geographic context**. Paper: U.S.-focused |
+| Pitch “we beat the human ceiling” | Deliverable 3 treats an unexpectedly above-benchmark result as a leakage and aggregation audit trigger, not evidence of product superiority |
+| Treat answers as revealed behavior | Card **Discussion of Biases:** self-selection and social desirability. Card **Other Known Limitations:** self-report may not reflect actual behavior. See Deliverable 1, **Biases / limitations** |
+| Claim causal effects from twin-only experiments | Simulated potential outcomes are not randomized human outcomes; use them only to generate hypotheses for a human experiment |
+| Train other models on twin outputs as labels | Propagates and obscures survey and model bias; human responses should remain the ground-truth labels |
 
 Required line on any chart that leaves the research team:
 
-> Simulated survey responses. Not observed behavior. US online panel, not population-weighted. Horizon evidenced: ~2 weeks.
+> Simulated survey responses. Not observed behavior. U.S. online panel, not population-weighted. Short-term evidence only: wave 4 launched approximately two weeks after wave 3, with longer intervals for items originating in earlier waves.
+
+## References
+
+- Toubia, O., Gui, G. Z., Peng, T., Merlau, D. J., Li, A., & Chen, H. (2025). *Twin-2K-500: A Dataset for Building Digital Twins of over 2,000 People Based on Their Answers to over 500 Questions*. [arXiv:2505.17479](https://arxiv.org/abs/2505.17479).
+- LLM-Digital-Twin. *Twin-2K-500 dataset card and data files*. [Hugging Face](https://huggingface.co/datasets/LLM-Digital-Twin/Twin-2K-500).
+- National Institute of Standards and Technology. (2023). *Artificial Intelligence Risk Management Framework (AI RMF 1.0)*. [https://doi.org/10.6028/NIST.AI.100-1](https://doi.org/10.6028/NIST.AI.100-1).
+- National Institute of Standards and Technology. (2020). *NIST Privacy Framework: A Tool for Improving Privacy through Enterprise Risk Management, Version 1.0*. [https://doi.org/10.6028/NIST.CSWP.01162020](https://doi.org/10.6028/NIST.CSWP.01162020).
+- U.S. Census Bureau. *2023 American Community Survey 1-Year Estimates*: [S0101](https://data.census.gov/table/ACSST1Y2023.S0101) (age), [S1501](https://data.census.gov/table/ACSST1Y2023.S1501) (education), and [S1901](https://data.census.gov/table/ACSST1Y2023.S1901) (income).
+- Sample-to-ACS benchmark construction and limitations: [notebooks/data_exploration.ipynb](../notebooks/data_exploration.ipynb).

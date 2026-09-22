@@ -1,6 +1,6 @@
 """Build leakage-safe JSONL from Hugging Face wave_split + CSVs. Never loads full_persona.
 
-    python -m src.data.build_jsonl --out_dir data/poc --poc_train_pids 500 --max_items_per_pid 20 --mc_only
+    python -m src.data.build_jsonl --out_dir data/poc --poc_train_pids 500 --max_items_per_pid 20
 
 Writes:
     data/poc/splits/pids_{train,val,test}.json
@@ -193,7 +193,6 @@ def build_for_pids(
     keep_persona_cols: list[str],
     max_items: int | None,
     mc_only: bool,
-    rng: random.Random,
 ) -> tuple[list[dict], list[dict]]:
     w13_i = w13.set_index("pid")
     w4_i = w4.set_index("pid")
@@ -212,7 +211,8 @@ def build_for_pids(
             r4 = r4.iloc[0]
         persona = persona_from_table(r13, keep_persona_cols)
         cols = list(scored)
-        rng.shuffle(cols)
+        # Keep each participant's item sample stable when another split/cap changes.
+        random.Random((SEED << 32) ^ int(pid)).shuffle(cols)
         n_kept = 0
         for col in cols:
             meta = col_index.get(col)
@@ -256,6 +256,11 @@ def main() -> None:
     print(f"{len(overlap)} overlap columns")
 
     keep_cols = persona_keep_columns(raw["w13"], set(overlap), raw["catalog"])
+    leaked_keep_cols = set(keep_cols) & set(overlap)
+    if leaked_keep_cols:
+        raise AssertionError(
+            f"No-copy persona contains repeated target columns: {sorted(leaked_keep_cols)[:5]}"
+        )
     (out / "persona_columns.txt").write_text("\n".join(keep_cols), encoding="utf-8")
     splits = person_split(raw["wave_split"]["pid"].unique().tolist())
     for name, pids in splits.items():
@@ -268,7 +273,6 @@ def main() -> None:
         "test": splits["test"][: args.poc_eval_pids] if args.poc_eval_pids else splits["test"],
     }
 
-    rng = random.Random(SEED)
     for name, pids in example_pids.items():
         examples, diags = build_for_pids(
             pids,
@@ -279,7 +283,6 @@ def main() -> None:
             keep_cols,
             args.max_items_per_pid,
             mc_only,
-            rng,
         )
         write_jsonl(out / f"examples_{name}.jsonl", examples)
         write_jsonl(out / f"diag_{name}.jsonl", diags)

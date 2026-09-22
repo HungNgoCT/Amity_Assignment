@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.metadata
 import inspect
 import json
 import subprocess
@@ -34,6 +35,28 @@ def bundle_id() -> str:
     except Exception:
         h = "nogit"
     return f"{date.today():%Y%m%d}-{h}"
+
+
+def git_is_dirty() -> bool | None:
+    try:
+        return bool(
+            subprocess.check_output(
+                ["git", "status", "--porcelain"], stderr=subprocess.DEVNULL
+            ).strip()
+        )
+    except Exception:
+        return None
+
+
+def package_versions() -> dict[str, str]:
+    names = ("torch", "transformers", "peft", "datasets", "accelerate", "bitsandbytes")
+    versions = {}
+    for name in names:
+        try:
+            versions[name] = importlib.metadata.version(name)
+        except importlib.metadata.PackageNotFoundError:
+            versions[name] = "not-installed"
+    return versions
 
 
 def cuda_flags() -> tuple[bool, bool]:
@@ -113,6 +136,21 @@ def tokenize_supervised(examples: list[dict], tokenizer) -> Dataset:
     return ds.map(_tok, remove_columns=ds.column_names)
 
 
+def make_training_args(n_train: int, **kwargs) -> TrainingArguments:
+    """Transformers 4 vs 5: drop unknown kwargs; 5.x has warmup_steps, not warmup_ratio."""
+    params = inspect.signature(TrainingArguments.__init__).parameters
+    if "eval_strategy" not in params and "eval_strategy" in kwargs:
+        kwargs["evaluation_strategy"] = kwargs.pop("eval_strategy")
+    if "warmup_ratio" in kwargs and "warmup_ratio" not in params:
+        ratio = float(kwargs.pop("warmup_ratio"))
+        if "warmup_steps" in params:
+            eff = max(1, int(kwargs.get("per_device_train_batch_size", 1)) * int(kwargs.get("gradient_accumulation_steps", 1)))
+            steps = max(1, (n_train + eff - 1) // eff) * int(kwargs.get("num_train_epochs", 1))
+            kwargs["warmup_steps"] = max(1, int(ratio * steps))
+    kwargs = {k: v for k, v in kwargs.items() if k in params}
+    return TrainingArguments(**kwargs)
+
+
 class PadCollator:
     def __init__(self, tokenizer):
         self.pad_id = tokenizer.pad_token_id
@@ -152,6 +190,8 @@ def main() -> None:
     if not leak_path.exists():
         raise SystemExit(f"Missing {leak_path}. Run: python -m src.data.build_jsonl")
     assert_prompts_leak_free(load_jsonl(leak_path), source=str(leak_path))
+    assert_prompts_leak_free(train_ex, source=args.train_jsonl, require_hit=False)
+    assert_prompts_leak_free(val_ex, source=args.val_jsonl, require_hit=False)
 
     torch.manual_seed(SEED)
     out = Path(args.out_dir)
@@ -180,9 +220,7 @@ def main() -> None:
         report_to=[],
         seed=SEED,
     )
-    if "eval_strategy" not in inspect.signature(TrainingArguments.__init__).parameters:
-        targs_kw["evaluation_strategy"] = targs_kw.pop("eval_strategy")
-    targs = TrainingArguments(**targs_kw)
+    targs = make_training_args(len(train_ex), **targs_kw)
     trainer = Trainer(
         model=model,
         args=targs,
@@ -204,7 +242,19 @@ def main() -> None:
                 "train_examples": len(train_ex),
                 "val_examples": len(val_ex),
                 "epochs": args.epochs,
+                "per_device_batch_size": args.per_device_batch_size,
+                "gradient_accumulation_steps": args.grad_accum,
+                "learning_rate": args.lr,
+                "max_length": MAX_LENGTH,
+                "lora": {
+                    "r": LORA_R,
+                    "alpha": LORA_ALPHA,
+                    "dropout": LORA_DROPOUT,
+                    "target_modules": LORA_TARGETS,
+                },
                 "seed": SEED,
+                "git_dirty": git_is_dirty(),
+                "packages": package_versions(),
             },
             indent=2,
         ),
