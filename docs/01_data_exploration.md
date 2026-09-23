@@ -44,7 +44,7 @@
    - **wave1_3_response.csv**: 2,058 participants × 760 response columns, plus pid.
    - **wave4_response.csv**: 2,058 participants × 126 response columns, plus pid.
 
-   Label-form CSVs, precomputed LLM outputs, and anonymized raw Qualtrics exports were not used in the analyses below.
+   Label-form CSVs, precomputed LLM outputs, and the anonymized Qualtrics exports under `raw_data/` were not used to compute the statistics below. Those files are in the repository as reference copies of the public dataset. The notebook loads the pinned Hugging Face revision.
 
 2. **Question types and scoring.**
 
@@ -56,7 +56,7 @@
    | **~500** | Questions administered across waves 1–3 |
    | **760** | Response columns after matrix rows and multi-select options are expanded |
 
-   The full catalog contains **175 Multiple Choice (MC)**, **36 Matrix**, **28 Text Entry (TE)**, **14 Display/Instruction (DB)**, and **3 Slider** QuestionIDs. The held-out wave-4 set contains **84 QuestionIDs**: 68 MC, 7 Matrix, 6 TE, and 3 Slider; DB screens are not prediction targets. The paper describes 88 holdout questions across 17 tasks. I have not reconciled that count with these 84 QuestionIDs and 126 response columns; the two units may differ. A response column is mapped to its question type through the catalog's `csv_columns` field.
+   The full catalog contains **175 Multiple Choice (MC)**, **36 Matrix**, **28 Text Entry (TE)**, **14 Display/Instruction (DB)**, and **3 Slider** QuestionIDs. The held-out wave-4 set contains **84 QuestionIDs**: 68 MC, 7 Matrix, 6 TE, and 3 Slider; DB screens are not prediction targets. The paper describes 88 holdout questions across 17 tasks. I have not finished a row-level join between that count and these 84 QuestionIDs (126 response columns). A paper "question" need not be one catalog QuestionID, and one QuestionID can expand into several CSV columns, so the two counts should stay separate until that join exists. A response column is mapped to its question type through the catalog's `csv_columns` field.
 
    Proposed scoring by question type:
    - **154 single-choice MC QuestionIDs in the full catalog** (68 of the 84 wave-4 QuestionIDs): exact-match accuracy—the predicted option either matches or does not (e.g., target = option 3, prediction = option 3 → correct).
@@ -100,7 +100,7 @@
    **This comparison measures how consistently a person answers the same item over time**. It provides the empirical **human test–retest benchmark** for the prediction task. The earlier answer is also the copy-last prediction. It is withheld from the primary no-copy model input, but Deliverables 2 and 3 also define a separately reported full-history condition in which this temporally valid waves 1–3 answer is explicitly available. The two conditions must not be pooled.
 
    Descriptive results from my EDA (not the paper's overall score):
-   - **MC:** exact-match rate ≈ **73.5%**.
+   - **MC:** exact-match rate ≈ **73.5%** on all 68 repeated MC columns and all 2,058 people. Deliverable 6's copy-last exact match of **79.2%** is a different sample: at most 20 MC items per person on 100 validation participants. The two percentages are not the same statistic.
    - **Matrix:** exact-match rate ≈ **60.3%**; mean ordinal error ≈ **0.52 scale points**.
    - **Slider:** mean absolute error ≈ **15.5 points** on a 0–100 scale. Exact match is only ≈ **12.0%**, which is too strict to use as the headline.
    - **Numeric TE:** exact-match rate ≈ **25.3%**; this is only a diagnostic because the questions use different numerical scales.

@@ -1,12 +1,12 @@
 # Deliverable 6 — POC (bonus)
 
-This is a **runnable slice**, not a reproduction of Toubia et al. Figure 2. The minimal Deliverable 3 gate is: leakage checks pass, parse rate is reported, and slice MAD is compared with random. Beating random is an aspirational performance check, not a requirement for completing the bonus POC. The run may be weak, but it must not be leaky. This minimal take-home evaluation deliberately does not implement Deliverable 3's full research protocol, such as 100 random-baseline seeds, participant-bootstrap confidence intervals, or the stronger follow-up thresholds.
+This is a **runnable slice**, not a reproduction of Toubia et al. Figure 2. The slice is multiple-choice (MC) only, so the headline is **exact match**. Slice mean absolute deviation (MAD) is reported beside it and is not the headline: 19 of the 68 MC columns have a train-observed code range above 1, so MAD gives partial credit for a nearby code. Deliverable 3 treats that as the wrong headline unless the options are ordinal. The minimal gate is: leakage checks pass, parse rate is reported, and exact match is compared with random and train-majority. A score above random is not required to complete the bonus. The run may be weak, but it must not be leaky. This evaluation does not implement Deliverable 3's full protocol, such as 100 random-baseline seeds, participant-bootstrap confidence intervals, or the stronger follow-up thresholds.
 
-**Not verified:** official 17-task MAD script / paper **81.72%**. The results below are slice-mean MAD with **train-only** empirical ranges and are not directly comparable with the paper's score.
+**Not verified:** official 17-task script / paper **81.72%** (Deliverable 1). Exact match below is the slice headline. Slice MAD uses **train-only** empirical ranges and is not comparable with the paper's score.
 
-**References:** D2 §2 data pipeline and §5 training details (`docs/02_model_plan.md`); D3 §3 train / test protocol and §5 acceptance criteria (`docs/03_eval_strategy.md`). I first chose `HuggingFaceTB/SmolLM2-360M-Instruct` (Experiment 3). That run scored too low, so I then used `Qwen/Qwen2.5-0.5B-Instruct` as the default local checkpoint (Experiments 1–2). The JSONL builder pins Hugging Face revision `f883165a3026fde855dfd448e0cd16443ab257b6`, the same revision as the Deliverable 1 notebook.
+**References:** D2 §2 data pipeline and §5 training details (`docs/02_model_plan.md`); D3 §3 train / test protocol and §5 acceptance criteria (`docs/03_eval_strategy.md`). The JSONL builder pins Hugging Face revision `f883165a3026fde855dfd448e0cd16443ab257b6`, the same revision as the Deliverable 1 notebook. Model choice is in the disclosure below.
 
-**Model-size disclosure:** the assignment asks for a model with **fewer than 0.5B parameters**. I first chose `HuggingFaceTB/SmolLM2-360M-Instruct` (Experiment 3). That run stayed leak-safe and fully parseable but scored too low (slice MAD `0.4775` vs random `0.5256`). I then trained `Qwen/Qwen2.5-0.5B-Instruct` and treat it as the default local checkpoint. Its [model card](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct) reports **0.49B** parameters (`494,032,768`) with tied word embeddings, so the base model is under 0.5B. `PreTrainedModel.num_parameters()` reports `630,167,424` because it counts that tied embedding matrix a second time (`494,032,768 + 136,134,656`). This LoRA configuration adds `8,798,208` trainable parameters. Unique base weights plus the adapter are `502,830,976`, which exceeds 0.5B only if the adapter is added to the base count. The leakage-safe data and evaluation pipeline stayed the same across all three experiments.
+**Model-size disclosure:** the assignment asks for a model with **fewer than 0.5B parameters**. I first chose `HuggingFaceTB/SmolLM2-360M-Instruct` (Experiment 3). That run stayed leak-safe and fully parseable but scored too low on the slice headline (exact match `0.4145` vs random `0.4545`). I then trained `Qwen/Qwen2.5-0.5B-Instruct` and treat it as the default local checkpoint. Its [model card](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct) reports **0.49B** parameters (`494,032,768`) with tied word embeddings, so the base model is under 0.5B. `PreTrainedModel.num_parameters()` reports `630,167,424` because it counts that tied embedding matrix a second time (`494,032,768 + 136,134,656`). This LoRA configuration adds `8,798,208` trainable parameters. Unique base weights plus the adapter are `502,830,976`, which exceeds 0.5B only if the adapter is added to the base count. The leakage-safe data and evaluation pipeline stayed the same across all three experiments.
 
 ## Layout
 
@@ -22,7 +22,11 @@ runs/<run>/adapter         # final PEFT files; sibling bundle_manifest.json; com
 results/<run>/metrics.json # after evaluate; committed
 ```
 
-This POC implements Deliverable 2's **no-copy** condition. Persona = non-overlap CSV fields only (demographics first, capped). Those fields are unlabeled Qualtrics codes, for example `QID12: 2`, with no question text and no option labels in the prompt. A model of this size cannot tell that a code is sex, age, or income. That missing legend is one reason these runs trail train-majority, separate from model size. One JSONL row = one `(pid, column)`. Person split, seed `20250319`, 70 / 15 / 15. Default slice: **MC only**, 500 train pids × ≤20 items, 100 val and 100 test pids (this report scores validation). The random baseline samples uniformly from each column's train-observed answer codes. Copy-last diagnostics live in `diag_*.jsonl`, never in the prompt. Leak check is on the **persona** span: the QID154 stem itself says “70 lawyers”.
+This POC implements Deliverable 2's **no-copy** condition. Persona = non-overlap CSV fields only, demographics first, then a hard cap of 40 columns. In the committed `data/poc/persona_columns.txt`, that cap is `QID11`–`QID24` and then `QID25_1`–`QID25_26`, so 26 of the 40 lines are one QuestionID. Those fields are unlabeled Qualtrics codes, for example `QID12: 1`, with no question text and no option labels. A model of this size cannot tell that a code is sex, age, or income.
+
+The question side has a second legend gap. MC options are printed as text, for example `["more", "less"]` or the six “favor program A/B” sentences on `QID157`, while the supervised target is the numeric Qualtrics code (`"2"`, `"1"`). On all 10,000 training rows the target string is absent from that option list, and the prompt never says `1 = more`. The model has to emit an integer the prompt does not define, from a persona it cannot read. That is why these runs sit near random on exact match and trail train-majority. The three reported runs used this prompt. The JSONL was not rebuilt afterward, and the adapters were not retrained.
+
+One JSONL row = one `(pid, column)`. Person split, seed `20250319`, 70 / 15 / 15. Default slice: **MC only**, 500 train pids × ≤20 items, 100 validation and 100 test pids. This report scores validation only. `data/poc/examples_test.jsonl` (100 people, 2,000 rows) was built with the same split and was not used to choose a schedule or to report a score. The random baseline samples uniformly from each column's train-observed answer codes. Copy-last diagnostics live in `diag_*.jsonl`, never in the prompt. Leak check is on the **persona** span: the QID154 stem itself says “70 lawyers”.
 
 Unlike the research-scale D2 pipeline, this POC constructs a safe question payload directly from the catalog's `QuestionText`, `Options`, and `Range`; it does not load and recursively strip `wave4_Q_wave4_A`. It also uses a plain prompt, 2,048-token sequences, and no retrieval. Experiment 1 used the script defaults (2 epochs, learning rate `2e-4`). Experiment 2 used 3 epochs and `1e-4`. Experiment 3 used 4 epochs and `1e-4` (from the Colab `bundle_manifest.json`). These are explicit POC shortcuts rather than implementations of D2's 7B summary-plus-retrieval recipe.
 
@@ -52,9 +56,11 @@ python -m src.evaluate --train_jsonl data/poc/examples_train.jsonl --test_jsonl 
 ### Data used
 
 - Train participants / examples: `500` / `10,000`
-- Validation participants / examples: `100` / `2,000`
+- Validation participants / examples: `100` / `2,000` (the scored split)
+- Test participants / examples built and not scored: `100` / `2,000` (`data/poc/examples_test.jsonl`)
 - Slice: `MC only`, at most `20` items per participant
 - Participant split seed: `20250319`
+- Headline: MC exact match. Slice MAD is secondary (train-only code range; partial credit on 19 columns)
 
 ### Integrity checks
 
@@ -67,7 +73,7 @@ If any integrity check fails, stop here and do not report the model score as val
 
 ### Results
 
-Experiments 1 and 2 share the local `data/poc` JSONL, so their baselines match. Experiment 3 rebuilt JSONL on Colab with the same caps and seeds; its baselines are therefore similar but not identical. All scores use train-only empirical ranges.
+Experiments 1 and 2 share the local `data/poc` JSONL, so their baselines match. Experiment 3 rebuilt JSONL on Colab with the same caps and seeds; its baselines are therefore similar but not identical. Exact match does not use a range. Slice MAD uses train-only empirical ranges. Copy-last exact match of **79.2%** on Experiments 1–2 is not Deliverable 1's **73.5%**: that figure is all 68 repeated MC columns and all 2,058 people.
 
 #### Experiment 1 — Qwen2.5-0.5B-Instruct, QLoRA, 2 epochs, lr `2e-4` (local RTX 3060)
 
@@ -83,13 +89,13 @@ Experiments 1 and 2 share the local `data/poc` JSONL, so their baselines match. 
 - Hardware: NVIDIA GeForce RTX 3060 Laptop GPU, 6 GB VRAM
 - Adapter: `runs/poc/adapter`
 - Source: `results/poc/metrics.json` and `runs/poc/bundle_manifest.json`
-- Uniform random: slice MAD `0.5357`; MC exact match `0.4685`; parse rate `100.00%`; people `100`
-- Train majority: slice MAD `0.5797`; MC exact match `0.5245`; parse rate `100.00%`; people `100`
-- Copy-last / same-pair human benchmark: slice MAD `0.8461`; MC exact match `0.7920`; coverage/parse rate `99.95%`; people `100`
-- LoRA SFT: slice MAD `0.5274`; MC exact match `0.4670`; parse rate `100.00%`; people `100`
-- LoRA MAD / copy-last MAD: `0.623`
+- LoRA SFT: exact match `0.4670` (headline); slice MAD `0.5274`; parse rate `100.00%`; people `100`
+- Uniform random: exact match `0.4685`; slice MAD `0.5357`; parse rate `100.00%`; people `100`
+- Train majority: exact match `0.5245`; slice MAD `0.5797`; parse rate `100.00%`; people `100`
+- Copy-last / same-pair human benchmark: exact match `0.7920`; slice MAD `0.8461`; diagnostic coverage `99.95%`; people `100`
+- LoRA MAD / copy-last MAD (secondary): `0.623`
 
-> Integrity checks passed. This 2-epoch Qwen run did **not** beat random (`0.5274` vs `0.5357`) and trailed train-majority (`0.5797`). The loop produced fully parseable codes. The persona was a short list of unlabeled column codes, so the model had little readable individual information with which to beat a population prior.
+> Integrity checks passed. Headline exact match `0.4670` is level with random `0.4685` and below train-majority `0.5245`. Secondary MAD `0.5274` is also below random MAD `0.5357`. Every output parsed. The prompt gaps above — unlabeled persona codes, and numeric targets with text options — leave the model little readable individual information.
 
 #### Experiment 2 — Qwen2.5-0.5B-Instruct, QLoRA, 3 epochs, lr `1e-4` (local RTX 3060)
 
@@ -114,13 +120,13 @@ python -m src.evaluate --train_jsonl data/poc/examples_train.jsonl --test_jsonl 
 - Adapter: `runs/poc_e3_lr1e4/adapter`
 - Source: `results/poc_e3_lr1e4/metrics.json` and `runs/poc_e3_lr1e4/bundle_manifest.json`
 - Reproducibility: that manifest records `git_dirty: true` and short hash `3e3eaf7`, which is not the current tree. Rescoring the saved adapter with the current evaluator should match the metrics file. Retraining from today's tree will not reproduce that adapter bit for bit.
-- Uniform random: slice MAD `0.5357`; MC exact match `0.4685`; parse rate `100.00%`; people `100`
-- Train majority: slice MAD `0.5797`; MC exact match `0.5245`; parse rate `100.00%`; people `100`
-- Copy-last / same-pair human benchmark: slice MAD `0.8461`; MC exact match `0.7920`; coverage/parse rate `99.95%`; people `100`
-- LoRA SFT: slice MAD `0.5411`; MC exact match `0.4765`; parse rate `100.00%`; people `100`
-- LoRA MAD / copy-last MAD: `0.640`
+- LoRA SFT: exact match `0.4765` (headline); slice MAD `0.5411`; parse rate `100.00%`; people `100`
+- Uniform random: exact match `0.4685`; slice MAD `0.5357`; parse rate `100.00%`; people `100`
+- Train majority: exact match `0.5245`; slice MAD `0.5797`; parse rate `100.00%`; people `100`
+- Copy-last / same-pair human benchmark: exact match `0.7920`; slice MAD `0.8461`; diagnostic coverage `99.95%`; people `100`
+- LoRA MAD / copy-last MAD (secondary): `0.640`
 
-> Same validation JSONL as Experiment 1. This schedule **did** beat random (`0.5411` vs `0.5357`) by a thin margin and stayed below train-majority (`0.5797`). The gain is too small to treat as a research-scale success; D3's stronger follow-up bar is mean-random + 0.01.
+> Same validation JSONL as Experiment 1. Exact match `0.4765` is `0.008` above this split's random exact match and still below train-majority `0.5245`. Secondary MAD is `0.0054` above random MAD. Both gaps are from one seed, on the validation split used to choose this schedule, and the test JSONL was not scored. I do not treat that as beating random. Deliverable 3's stronger follow-up bar (mean random + 0.01, with a paired interval) is not met.
 
 #### Experiment 3 — SmolLM2-360M-Instruct, QLoRA, 4 epochs, lr `1e-4` (Colab T4)
 
@@ -148,19 +154,19 @@ Train, leak checks, and evaluate for this experiment were all executed on Colab.
 - Hardware: Colab T4
 - Adapter: `runs/smollm360m_e3/adapter` (trained on Colab at `/content/runs/smollm360m_e3/adapter`)
 - Source: `results/smollm360m_e3/metrics.json` and `runs/smollm360m_e3/bundle_manifest.json` (Colab → Drive → repo; JSONL rebuilt on Colab, so baselines are not identical to Experiment 1)
-- Uniform random: slice MAD `0.5256`; MC exact match `0.4545`; parse rate `100.00%`; people `100`
-- Train majority: slice MAD `0.5954`; MC exact match `0.5425`; parse rate `100.00%`; people `100`
-- Copy-last / same-pair human benchmark: slice MAD `0.8565`; MC exact match `0.8045`; coverage/parse rate `99.85%`; people `100`
-- LoRA SFT: slice MAD `0.4775`; MC exact match `0.4145`; parse rate `100.00%`; people `100`
-- LoRA MAD / copy-last MAD: `0.558`
+- LoRA SFT: exact match `0.4145` (headline); slice MAD `0.4775`; parse rate `100.00%`; people `100`
+- Uniform random: exact match `0.4545`; slice MAD `0.5256`; parse rate `100.00%`; people `100`
+- Train majority: exact match `0.5425`; slice MAD `0.5954`; parse rate `100.00%`; people `100`
+- Copy-last / same-pair human benchmark: exact match `0.8045`; slice MAD `0.8565`; diagnostic coverage `99.85%`; people `100`
+- LoRA MAD / copy-last MAD (secondary): `0.558`
 
-> This is the first model I chose for the `<0.5B` request. Integrity held and every output parsed, but SmolLM2-360M did **not** beat random (`0.4775` vs `0.5256`) and trailed train-majority (`0.5954`). That low result is why the default local checkpoint is now Qwen2.5-0.5B-Instruct.
+> This is the first model I chose for the `<0.5B` request. Integrity held and every output parsed. Exact match `0.4145` is below random `0.4545` and below train-majority `0.5425`. Secondary MAD is also below random. That is why the default local checkpoint is now Qwen2.5-0.5B-Instruct. The Qwen runs use the same prompt gaps and still trail majority on exact match.
 
 ### Interpretation
 
-> All three experiments completed with green leakage checks and 100% parse rate. Ranked by LoRA slice MAD, Experiment 2 is highest (`0.5411`), then Experiment 1 (`0.5274`), then Experiment 3 (`0.4775`). The same order holds against each experiment's own random baseline: Experiment 2 `+0.0054`, Experiment 1 `−0.0083`, Experiment 3 `−0.0481`. Experiment 2 is the only schedule that beat random, but it still trailed train-majority and missed D3's stronger +0.01 follow-up margin. Experiment 3 rebuilt JSONL on Colab, so its absolute MAD is not a paired comparison with Experiments 1–2; even so, it is the weakest of the three against its own random and majority scores. That gap is consistent with the smaller SmolLM2-360M base, not with T4 versus the 3060. The POC loop works; none of these tiny-model slices is a candidate for research-scale promotion.
+> All three experiments completed with green leakage checks and 100% parse rate. Ranked by exact match, Experiment 2 is `0.4765`, Experiment 1 is `0.4670`, and Experiment 3 is `0.4145`. Against each run's own random exact match that is `+0.008`, `−0.0015`, and `−0.040`. All three remain below their own train-majority exact match (`0.5245`, `0.5245`, and `0.5425`). Experiment 3 rebuilt JSONL on Colab, so its absolute score is not a paired comparison with Experiments 1–2; against its own random and majority scores it is still the weakest. The POC loop works. None of these slices is a candidate for research-scale promotion, and the shared prompt gaps above are a reason the scores sit near the population prior.
 
-These are validation-slice results using train-only empirical ranges. They are not the official 17-task MAD score, do not include participant-bootstrap confidence intervals, and must not be compared directly with the paper's published **81.72%** human result. Copy-last is an empirical same-pair test–retest benchmark, not a mathematical upper bound.
+These are validation-slice results. The test JSONL was not scored. They are not the official 17-task score, do not include participant-bootstrap confidence intervals, and must not be compared with the paper's **81.72%** (Deliverable 1). Copy-last on this slice is an empirical same-pair retest on the capped MC sample, not that paper figure and not a mathematical upper bound.
 
 > **External-use disclosure:** Simulated survey responses. Not observed behavior. U.S. online panel, not population-weighted. Short-term evidence only: wave 4 launched approximately two weeks after wave 3, with longer intervals for items originating in earlier waves.
 
@@ -170,17 +176,18 @@ If leak test is red, do not print a score table. If slice MAD > copy-last/ceilin
 
 ### Discussion
 
-**Observation**: larger models appear to predict better on this slice: both Qwen2.5-0.5B-Instruct runs outscored SmolLM2-360M-Instruct, including when each experiment is compared with its own random baseline. That is why Qwen is now the default local checkpoint; the parameter count is disclosed above. More training epochs also appear to help within the Qwen pair: the 3-epoch / `1e-4` schedule (Experiment 2) beat the 2-epoch / `2e-4` schedule (Experiment 1). Both models received the same unlabeled column codes, so this gap is not evidence that either model interpreted demographics.
+**Observation**: on exact match, both Qwen2.5-0.5B-Instruct runs outscored SmolLM2-360M-Instruct, including against each run's own random baseline. That is why Qwen is the default local checkpoint; the parameter count is disclosed above. Within the Qwen pair, the 3-epoch / `1e-4` schedule (Experiment 2) is higher than the 2-epoch / `2e-4` schedule (Experiment 1). Both still trail train-majority, and both received the same unlabeled persona codes and the same text-option / numeric-target prompt, so the gap is not evidence that either model interpreted demographics.
 
-**These are initial observations only**. The three experiments are not a controlled ablation — Experiment 2 also changed the learning rate, and Experiment 3 used a different base model, rebuilt JSONL, different hardware, and 4 epochs. Establishing either pattern with higher confidence would require more matched experiments and the stronger Deliverable 3 benchmarks (locked test, more seeds, participant-bootstrap intervals).
+**These are initial observations only**. The three experiments are not a controlled ablation. Experiment 2 also changed the learning rate, and Experiment 3 used a different base model, rebuilt JSONL, different hardware, and 4 epochs. The validation split was used both to pick the schedule and to report the score. A later claim would need the option legend fixed, then the locked test split, more seeds, and participant-bootstrap intervals from Deliverable 3.
 
 ## Future work
 
 With more time I would keep this leakage-safe slice fixed and test the Discussion observations under cleaner conditions. Next steps on the prototype:
 
-1. Test larger instruction models such as 1.5B, 7B, or bigger if hardware allows, on the same JSONL, seeds, and QLoRA recipe.
-2. Compare frozen-prompt / prompt-engineering baselines with QLoRA fine-tuning, and with the combination, before treating fine-tuning as the default.
-3. Score the same slice with the official 17-task MAD script and participant-bootstrap intervals. A win over train-majority would count only if that paired interval stayed above zero.
+1. Fix the prompt before scaling: print `1 = <option text>` for each MC choice, and put question text on the persona fields instead of bare `QID` codes. Rebuild the JSONL, retrain one Qwen run on the same caps and seed, and score exact match on validation. Open `examples_test.jsonl` only after that recipe is locked.
+2. Test larger instruction models such as 1.5B, 7B, or bigger if hardware allows, on that corrected JSONL, the same seeds, and the same QLoRA recipe.
+3. Compare frozen-prompt / prompt-engineering baselines with QLoRA fine-tuning, and with the combination, before treating fine-tuning as the default.
+4. Score the same slice with the official 17-task MAD script and participant-bootstrap intervals. A win over train-majority would count only if that paired interval stayed above zero.
 
 ## Deps (POC)
 

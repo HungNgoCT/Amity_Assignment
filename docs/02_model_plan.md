@@ -19,7 +19,7 @@ The model is shared across participants; it is not one separately trained model 
 
 **Unit of prediction.** One example is one `(pid, response column)` pair, where `pid` is the participant identifier: a leakage-safe persona, one held-out wave-4 question, and one target answer. A response column (for example, `QID154` or `QID287_1`) is the scoring unit; one Qualtrics QuestionID may expand into several response columns.
 
-The held-out set contains **126 response columns** mapped through the catalog's `csv_columns` field to **84 QuestionIDs**: 68 Multiple Choice (MC), 7 Matrix, 6 Text Entry (TE), and 3 Slider. Display/Instruction (DB) screens have no response columns and are excluded. These are exploratory data analysis (EDA) counts, not figures reported by the paper. The paper's 88 holdout questions are a different unit, and I have not reconciled them with these 84 QuestionIDs.
+The held-out set contains **126 response columns** mapped through the catalog's `csv_columns` field to **84 QuestionIDs**: 68 Multiple Choice (MC), 7 Matrix, 6 Text Entry (TE), and 3 Slider. Display/Instruction (DB) screens have no response columns and are excluded. These are exploratory data analysis (EDA) counts. How they relate to the paper's 88 holdout questions is in Deliverable 1.
 
 **Two interpretations of the historical answers.** The assignment can reasonably be read in two ways. An earlier answer to the same question is temporally valid waves 1–3 history, not a future-label leak. However, allowing it creates a strong copy-last shortcut and changes the question from whether the model can infer an unseen response from the rest of the persona to whether it can update a known prior response. I would therefore report both conditions and never mix them within one result:
 
@@ -226,7 +226,7 @@ Model selection and final reporting follow Deliverable 3. The important design c
 - Report parse rate and count invalid generations as failures.
 - In no-copy results, use the earlier same-item answer only for copy-last and human test–retest comparisons. In full-history results, it is an explicitly labeled historical feature, and performance must also be reported on the subset where the earlier and wave-4 answers differ.
 
-The paper reports **81.72% mean human test–retest accuracy across 17 tasks**. This is an empirical short-term benchmark, not a mathematical upper bound. A model that unexpectedly exceeds it should trigger a leakage and aggregation audit before the result is interpreted.
+The paper's **81.72%** figure, and the rule that an above-benchmark score triggers a leakage audit, are stated in Deliverable 1 and Deliverable 3.
 
 ---
 
