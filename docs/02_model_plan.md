@@ -183,6 +183,8 @@ Here and below, mean absolute deviation (MAD) accuracy refers to the paper's ran
 
 Training uses the model's official chat template. Rows are sampled by task or response column rather than uniformly from the expanded table, preventing large matrix blocks from dominating. I would log both training loss and validation metrics, but select checkpoints using Deliverable 3's validation 17-task person-equal MAD accuracy rather than token loss alone.
 
+The block below is the planned **chat-turn skeleton** for one training example, not a table of results. The braced names are placeholders for the §4 components: `{safe_summary}` is the deterministic persona summary, `{retrieved_safe_chunks}` are the retrieved persona blocks, `{stripped_question}` and `{legal_codes_or_numeric_range}` are the leakage-safe question payload, and `{target}` is the canonical wave-4 answer used as the supervised label. The same skeleton is used at inference, except the assistant turn is generated rather than filled with gold.
+
 ```text
 System:
 Predict how this survey participant would answer the question.
@@ -245,7 +247,7 @@ The paper reports **81.72% mean human test–retest accuracy across 17 tasks**. 
 
 ---
 
-## 8. If I had more time
+## 8. Further focus
 
 1. Compare 1.5B, 7B, and 14B models under the same persona and retrieval pipeline.
 2. Train a supervised retriever using validation performance rather than semantic similarity alone.
