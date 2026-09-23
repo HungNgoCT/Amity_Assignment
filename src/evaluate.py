@@ -196,7 +196,7 @@ def main() -> None:
     ceiling_preds = copy_last_preds(test, diag)
     ceiling = score(test, ceiling_preds, ranges, valid_codes)
     ceiling_mad = ceiling["slice_mean_mad"]
-    print("copy-last and ceiling are the same pairs on this slice (D3 §2.2).\n")
+    print("copy-last and ceiling are the same pairs on this slice (D3 §2).\n")
 
     print("=== Baselines ===")
     rand_scores = score(test, random_preds(test, valid_codes, rng), ranges, valid_codes)
