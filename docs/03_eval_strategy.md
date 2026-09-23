@@ -25,7 +25,7 @@ Modeling recipe: `docs/02_model_plan.md`. The summary answers those five points;
 
 3. **Split.** Person split, seed `20250319`, **70% / 15% / 15%**. Score only assigned non-null cells. Fit deciles and majority on train, tune on validation, lock test once. Report no-copy and full-history as two separate tables; never pool them.
 
-4. **Leakage.** Repeating the same question text on wave 4 is not leakage. Putting the **wave-4 answer** into the model input is leakage. Example for pid=1 / `QID154`: the person first answered **70**, then **82** on wave 4. `full_persona` already stores **82**, so that field cannot be used as the persona. `wave4_Q_wave4_A` is the held-out question plus that same **82**; if those `Answers` are not stripped, the prompt contains the target. The earlier **70** is history, not a future label: withhold it in no-copy, allow it in full-history. One item per sequence.
+4. **Leakage.** Repeating the same question text on wave 4 is not leakage. Putting the **wave-4 answer** into the model input is leakage. Example for pid=1 / `QID154`: the person first answered **70**, then **82** on wave 4. `full_persona` already stores **82**, so that field cannot be used as the persona. `wave4_Q_wave4_A` is the held-out question plus that same **82**; if those `Answers` are not stripped, the prompt contains the target and that is leakage. The earlier **70** is history, not a future label: withhold it in no-copy, allow it in full-history. Each training or inference sequence contains only one held-out wave-4 item, so a later item cannot see an earlier gold or predicted wave-4 answer.
 
 5. **Acceptance.** Leakage and input-condition checks are hard gates. Deliverable 6 reports slice MAD versus random and parse rate. Stronger follow-up: at least **0.01 MAD** (can change) above mean random, so a tiny win over chance does not count, and **80%** parse rate (can change), so most outputs are usable. Scale to 7B if validation CI lower bounds beat train-majority and question-only (and copy-last on changed-answer items for full-history). Research-scale target: test MAD / test-split human ≥ **0.80** (can change). These are my choices, not paper values; freeze them until the next cycle. An above-benchmark result triggers a leakage audit.
 
@@ -81,7 +81,7 @@ Report model MAD / same-split human MAD next to every project number. Type metri
 
 #### 3. Train / test protocol
 
-- Shuffle unique `pid`s with seed **`20250319`**, then **70% / 15% / 15%**. With `int(n * ratio)` and the remainder on test, 2,058 people become **1,440 / 308 / 310**.
+- Shuffle unique `pid`s with seed **`20250319`**, then assign **70% / 15% / 15%** to train, validation, and test. Counts use whole people only (`int`): train = `int(2058 × 0.70)` = **1,440**, validation = `int(2058 × 0.15)` = **308**, and the remaining **310** go to test.
 - No person in two splits. Grain: `(pid, column)` with a non-null wave-4 label.
 - Freeze `input_condition=no_copy|full_history` before building prompts; never pool the two conditions.
 - Deciles, majority, and any tabular MLP fit on **train** only. Validation for selection; test **once** after those decisions.
@@ -97,6 +97,8 @@ Repeating the same question text on wave 4 is not leakage. Putting the **wave-4 
 - **No-copy:** persona and retrieval have an empty `csv_columns` intersection with the 126 repeated target columns. The earlier answer is used only for copy-last and the human benchmark.
 - **Full-history:** the earlier answer may appear only as a source-tagged waves 1–3 feature. The two conditions are never pooled.
 - Disjoint train / validation / test pids. Freeze the test `(pid, column)` index so invalid outputs cannot shrink the denominator.
+
+The block below is the **unit-test checklist** for that same Deliverable 1 example, not a score table. Every generated prompt for pid=1 / `QID154` must pass these asserts before any MAD is reported.
 
 ```text
 pid=1, column=QID154
