@@ -1,12 +1,22 @@
 # Deliverable 3 — Evaluation strategy
 
-Modeling recipe: `docs/02_model_plan.md`. The summary answers the assignment; the sections below specify the scoring contract.
+## Requirements addressed
+
+1. Metrics for each question type
+2. Comparison baselines and the human benchmark
+3. Train, validation, and test protocol
+4. Leakage prevention
+5. Explicit acceptance criteria
+
+## Proposed evaluation protocol
+
+Modeling recipe: `docs/02_model_plan.md`. The summary answers the five requirements; the sections below specify the scoring contract.
 
 ### Evaluation summary
 
 1. **Metrics.** The system headline is the paper's **mean absolute deviation (MAD) accuracy** over 17 tasks, not one exact-match average: a 0–100 slider and a yes/no item are not the same scale. Under that: single-label Multiple Choice (MC) = accuracy plus Cohen's κ (Cohen, 1960); multi-select = Jaccard, with per-option F1 as a diagnostic; matrix = MAD plus ordinal MAE; slider = MAD plus native-scale MAE, not exact match; unbounded anchoring = MAD after train-only deciles. Exclude Display/Instruction (DB) screens. Join types through the catalog's `csv_columns`.
 
-2. **Comparators.** Recompute the human test–retest benchmark on the same test people and items as the model. The paper's **81.72%** is the full-sample published figure, not necessarily this split; it is a short-term empirical benchmark, not a mathematical ceiling. Trivial baselines: uniform random, train majority, and **copy-last** (same pairs as the human benchmark). Staged ablations: question-only, summary-only, summary plus retrieval (frozen), and a tabular neural baseline. Report no-copy and full-history separately.
+2. **Comparators.** Recompute the human test–retest benchmark on the same test people and items as the model. The paper's **81.72%** is the full-sample published figure, not necessarily this split; it is a short-term empirical benchmark, not a mathematical ceiling. Trivial baselines: uniform random, train majority, and **copy-last**. Copy-last uses the same earlier-versus-later pairs as the human benchmark. Staged ablations: question-only, summary-only, summary plus retrieval (frozen), and a tabular neural baseline. The paper's twin scores (**71.72%**, ratio **87.67%**) are citations only; I did not recompute them. Report no-copy and full-history separately.
 
 3. **Split.** Person split, seed `20250319`, **70% / 15% / 15%**. Score only assigned non-null cells. Fit deciles and majority on train, tune on validation, lock test once.
 
@@ -57,7 +67,7 @@ Worked example (pid=1, `QID154`, range 0–100): human 70 vs 82 → MAD acc 1 �
 | Question-only / summary-only / summary + retrieval | Frozen prompts with increasing persona information | Ablations before fine-tuning |
 | Tabular multilayer perceptron (MLP) | Safe non-overlap columns, train pids only | Neural baseline for known columns |
 
-Report model MAD / same-split human MAD next to every project number. Type metrics stay in separate columns and are never averaged into MAD.
+Report model MAD / same-split human MAD next to every project number. The paper's **87.67%** ratio is a citation; I did not recompute it. Type metrics stay in separate columns and are never averaged into MAD.
 
 If model MAD exceeds the human benchmark on many items, run §2.4 before interpreting the result.
 
