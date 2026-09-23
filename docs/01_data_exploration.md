@@ -34,16 +34,16 @@
 
    **`wave_split`** = table (**2,058 rows × 5 columns**), with one row per participant. Its fields separate earlier responses from the later retest:
    - **pid**: participant identifier.
-   - **wave1_3_persona_text** and **wave1_3_persona_json**: responses from waves 1–3, represented as text and structured JSON.
-   - **wave4_Q_wave1_3_A**: held-out questions paired with the participant’s earlier answers, used to measure test–retest consistency.
-   - **wave4_Q_wave4_A**: those questions paired with the participant’s wave-4 answers—the prediction targets.
+   - **wave1_3_persona_text** and **wave1_3_persona_json**: responses from waves 1–3, represented as text and structured JSON, respectively.
+   - **wave4_Q_wave1_3_A**: held-out questions paired with the participant’s **earlier** answers, used to measure test–retest consistency.
+   - **wave4_Q_wave4_A**: those questions paired with the participant’s **wave-4** answers—the prediction targets.
 
    Additional files outside the two Hugging Face configs include:
    - **question_catalog.json**: metadata for 256 QuestionIDs.
    - **wave1_3_response.csv**: 2,058 participants × 760 response columns, plus pid.
    - **wave4_response.csv**: 2,058 participants × 126 response columns, plus pid.
 
-   The dataset also provides label-form CSVs, precomputed LLM outputs, and anonymized raw Qualtrics exports. These additional artifacts were not used in the analyses below.
+   Label-form CSVs, precomputed LLM outputs, and anonymized raw Qualtrics exports were not used in the analyses below.
 
 2. **Question types and scoring.**
 
@@ -59,9 +59,9 @@
 
    Proposed scoring by question type:
    - **154 single-choice MC QuestionIDs in the full catalog** (68 of the 84 wave-4 QuestionIDs): exact-match accuracy—the predicted option either matches or does not (e.g., target = option 3, prediction = option 3 → correct).
-   - **Multi-select MC (21 in the full catalog; 0 of the 126 wave-4 scored columns):** Jaccard similarity measures the overlap between the predicted and selected option sets (e.g., target = `{A, C}`, prediction = `{A, B}` → overlap `{A}` divided by combined set `{A, B, C}` = **1/3**). Per-option F1 can be reported as a diagnostic.
+   - **Multi-select MC (21 in the full catalog; 0 of the 126 wave-4 scored columns):** Jaccard similarity measures the overlap between the predicted and selected option sets (e.g., target = `{A, C}`, prediction = `{A, B}` → overlap `{A}` divided by combined set `{A, B, C}` = **1/3**). Per-option F1 can be reported as a diagnostic: treat each choice as a yes/no (selected or not) and score that binary decision. This take-home does not compute it, because no multi-select column appears in the wave-4 scored set.
    - **Ordered Matrix responses:** ordinal mean absolute error (MAE)—the average distance between the predicted and target scale values—and a range-normalized accuracy score (e.g., target Likert score = 5, prediction = 3 → error = **2 points**).
-   - **Slider:** MAE in the original scale and range-normalized accuracy (e.g., `QID154`: wave-4 target = 82, prediction = 70 → MAE = **12** and normalized accuracy = **0.88**). Exact match is too strict for a 0–100 slider.
+   - **Slider:** MAE in the original scale and range-normalized accuracy (e.g., `QID154`: wave-4 target = 82, prediction = 70 → MAE = **12** and normalized accuracy = `1 − 12/100` = **0.88**). Exact match is too strict for a 0–100 slider.
    - **Numeric TE / anchoring:** MAE; following the paper, unbounded numerical answers are converted into ten ordered groups (deciles) before scoring. Two answers in the same decile have zero decile distance. Free-form text is not part of the held-out wave-4 item set and would require a separate scoring rubric.
    - **DB:** instruction-only screens with no response columns, such as a page explaining the study procedure, so they are excluded.
 
@@ -71,7 +71,9 @@
 
    The paper and dataset card describe the final sample as representative of U.S. adults. Recruitment used a Prolific online panel with quotas for age, sex, and ethnicity. To examine this claim, the exploratory data analysis (EDA) compares the sample's unweighted demographic shares with 2023 U.S. Census benchmarks, primarily the American Community Survey (ACS). This comparison is a diagnostic, not proof that the sample is or is not representative.
 
-   Gender/sex and census-region shares are within **2.5 percentage points** of the Census benchmarks. I flag absolute gaps above **5 percentage points** as descriptively important; this is a reporting threshold, not a statistical significance test.
+   **Gender/sex** and **census-region** shares are within **2.5** percentage points of the Census benchmarks.
+
+   I flag absolute gaps above **5** percentage points as descriptively important (this is a reporting threshold, not a statistical significance test):
 
    **More common in the sample than in the Census benchmark (overrepresented):**
    - College graduate / some postgraduate: **+13.9 percentage points**
@@ -94,7 +96,7 @@
 
    Wave 4 was launched approximately **two weeks after wave 3** and repeats heuristics, behavioral-economics, and pricing items from across waves 1–3. Because the repeated items originated in different waves, the elapsed time may be longer for items first administered earlier. In the standardized CSVs, **126 of the 760** waves 1–3 response columns also appear in wave 4. For each participant and repeated item, the earlier answer can therefore be compared with the later answer.
 
-   This comparison measures how consistently a person answers the same item over time. It provides the empirical **human test–retest benchmark** for the prediction task. The earlier answer is also the copy-last prediction. It is withheld from the primary no-copy model input, but Deliverables 2 and 3 also define a separately reported full-history condition in which this temporally valid waves 1–3 answer is explicitly available. The two conditions must not be pooled.
+   **This comparison measures how consistently a person answers the same item over time**. It provides the empirical **human test–retest benchmark** for the prediction task. The earlier answer is also the copy-last prediction. It is withheld from the primary no-copy model input, but Deliverables 2 and 3 also define a separately reported full-history condition in which this temporally valid waves 1–3 answer is explicitly available. The two conditions must not be pooled.
 
    Descriptive results from my EDA (not the paper's overall score):
    - **MC:** exact-match rate ≈ **73.5%**.
@@ -116,10 +118,10 @@
 
 ## Reproducibility
 
-Reproducible code, plots, and full tables: [notebooks/data_exploration.ipynb](../notebooks/data_exploration.ipynb).
+Reproducible code, plots, full tables, and ACS benchmark recoding: [notebooks/data_exploration.ipynb](../notebooks/data_exploration.ipynb).
 
 ## References
 
 - Toubia, O., Gui, G. Z., Peng, T., Merlau, D. J., Li, A., & Chen, H. (2025). *Twin-2K-500: A Dataset for Building Digital Twins of over 2,000 People Based on Their Answers to over 500 Questions*. [arXiv:2505.17479](https://arxiv.org/abs/2505.17479).
 - LLM-Digital-Twin. *Twin-2K-500 dataset card and data files*. [Hugging Face](https://huggingface.co/datasets/LLM-Digital-Twin/Twin-2K-500).
-- U.S. Census Bureau. *2023 American Community Survey 1-Year Estimates*: [S0101](https://data.census.gov/table/ACSST1Y2023.S0101) (age), [B01001](https://data.census.gov/table/ACSDT1Y2023.B01001) (sex), [S1501](https://data.census.gov/table/ACSST1Y2023.S1501) (education), and [S1901](https://data.census.gov/table/ACSST1Y2023.S1901) (income); [2023 Population Estimates Program](https://www.census.gov/programs-surveys/popest.html) (region). Benchmark recoding is documented in `notebooks/data_exploration.ipynb`.
+- U.S. Census Bureau. *2023 American Community Survey 1-Year Estimates*: [S0101](https://data.census.gov/table/ACSST1Y2023.S0101) (age), [B01001](https://data.census.gov/table/ACSDT1Y2023.B01001) (sex), [S1501](https://data.census.gov/table/ACSST1Y2023.S1501) (education), and [S1901](https://data.census.gov/table/ACSST1Y2023.S1901) (income); [2023 Population Estimates Program](https://www.census.gov/programs-surveys/popest.html) (region).
