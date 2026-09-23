@@ -118,10 +118,11 @@ def model_preds(examples: list[dict], adapter_dir: str) -> dict[tuple[int, str],
         base = json.loads(manifest.read_text(encoding="utf-8"))["base_model"]
     tokenizer = AutoTokenizer.from_pretrained(adapter_dir)
     dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-    model = PeftModel.from_pretrained(
-        AutoModelForCausalLM.from_pretrained(base, torch_dtype=dtype),
-        adapter_dir,
-    )
+    try:
+        base_model = AutoModelForCausalLM.from_pretrained(base, dtype=dtype)
+    except TypeError:
+        base_model = AutoModelForCausalLM.from_pretrained(base, torch_dtype=dtype)
+    model = PeftModel.from_pretrained(base_model, adapter_dir)
     model.eval()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(device)

@@ -17,7 +17,7 @@ The main design constraint is temporal data integrity: a wave-4 answer must neve
 | 3 — Evaluation strategy | [`docs/03_eval_strategy.md`](docs/03_eval_strategy.md) | Metrics, baselines, participant split, uncertainty, leakage tests, and acceptance criteria |
 | 4 — Business applications | [`docs/04_business_apps.md`](docs/04_business_apps.md) | Product concepts, suitable organizations, decision boundaries, and guardrails |
 | 5 — Maintenance | [`docs/05_maintenance.md`](docs/05_maintenance.md) | Monitoring, drift, retraining triggers, versioning, governance, and incident response |
-| 6 — Bonus POC | [`docs/06_poc.md`](docs/06_poc.md) | Commands and limitations for the runnable leakage-safe prototype |
+| 6 — Bonus POC | [`docs/06_poc.md`](docs/06_poc.md) | Commands, three completed runs, and limitations for the runnable leakage-safe prototype |
 
 Deliverables 2–5 describe a research-scale system. Deliverable 6 is intentionally a smaller proof of concept and does not implement the complete evaluation protocol in Deliverable 3.
 
@@ -45,7 +45,7 @@ Deliverables 2–5 describe a research-scale system. Deliverable 6 is intentiona
 │   │   └── build_jsonl.py             # Build person-split, leakage-safe POC JSONL
 │   ├── baselines.py                   # Random, train-majority, and copy-last baselines
 │   ├── leak_test.py                   # Prompt-level leakage checks
-│   ├── train.py                       # Qwen2.5-0.5B-Instruct LoRA/QLoRA training
+│   ├── train.py                       # QLoRA SFT; default Qwen2.5-0.5B-Instruct
 │   └── evaluate.py                    # Slice evaluation and optional adapter inference
 │
 ├── data/
@@ -86,15 +86,16 @@ The notebook loads the Twin-2K-500 Hugging Face dataset and writes generated tab
 
 ## Run the bonus POC
 
-Run these commands from the repository root:
+Default local loop (Run 1 in [`docs/06_poc.md`](docs/06_poc.md)). From the repository root:
 
 ```bash
+python -m unittest discover -s tests
 python -m src.data.build_jsonl --out_dir data/poc --poc_train_pids 500 --max_items_per_pid 20
-python -m src.leak_test data/poc/leak_fixture.jsonl
+python -m src.leak_test data/poc/leak_fixture.jsonl data/poc/examples_train.jsonl data/poc/examples_val.jsonl
 python -m src.train --train_jsonl data/poc/examples_train.jsonl --val_jsonl data/poc/examples_val.jsonl --out_dir runs/poc --qlora
 python -m src.evaluate --train_jsonl data/poc/examples_train.jsonl --test_jsonl data/poc/examples_val.jsonl --diag_jsonl data/poc/diag_val.jsonl --leak_jsonl data/poc/leak_fixture.jsonl --adapter_dir runs/poc/adapter --out_dir results/poc
 ```
 
 The POC implements the **no-copy** condition. It uses non-overlapping waves 1–3 fields for the persona, keeps copy-last data in diagnostic files only, and never loads `full_persona` for model prompts.
 
-The POC reports slice-level mean absolute deviation (MAD) accuracy using train-only empirical ranges. It is not a reproduction of the official 17-task paper evaluation. See [`docs/06_poc.md`](docs/06_poc.md) for hardware notes, command variants, and interpretation rules.
+The reported runs are a local Qwen2.5-0.5B-Instruct schedule, a longer lower-LR Qwen schedule, and a Colab `SmolLM2-360M-Instruct` run that meets a strict `<0.5B` reading. The POC reports slice-level mean absolute deviation (MAD) accuracy using train-only empirical ranges. It is not a reproduction of the official 17-task paper evaluation. See [`docs/06_poc.md`](docs/06_poc.md) for the three-run table, hardware notes, and interpretation rules.
