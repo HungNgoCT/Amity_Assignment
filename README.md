@@ -5,7 +5,7 @@ This repository is my submission for the **Research Engineer Take-Home Assignmen
 The main design constraint is temporal data integrity: a wave-4 answer must never enter the model input used to predict that answer. The research plan reports two input conditions separately:
 
 - **No-copy (primary):** excludes earlier answers to questions repeated in wave 4.
-- **Full-history (secondary):** allows those earlier answers as temporally valid history and compares the model against the copy-last baseline.
+- **Full-history (secondary):** allows those **earlier** answers as temporally valid history and compares the model against the copy-last baseline.
 
 ## Deliverables
 
@@ -64,7 +64,7 @@ Deliverables 2–5 describe a research-scale system. Deliverable 6 is intentiona
 └── results/                           # Notebook export and POC metrics.json
 ```
 
-The submission path is `docs/`, `notebooks/`, `src/`, `tests/`, plus the reported `data/poc/`, `runs/`, and `results/` artifacts. Intermediate Trainer checkpoints (`runs/**/checkpoint-*`) are not uploaded.
+The submission path is `docs/`, `notebooks/`, `src/`, `tests/`, plus the reported `data/poc/`, `runs/`, and `results/` artifacts. Intermediate Trainer checkpoints (`runs/**/checkpoint-*`) are not uploaded because of GitHub size limits; I will share a download link for those checkpoints if requested.
 
 ## Setup
 
@@ -92,7 +92,7 @@ The notebook loads the Twin-2K-500 Hugging Face dataset on first run (internet r
 
 ## Run the bonus POC
 
-Default local loop (Run 1 in [`docs/06_poc.md`](docs/06_poc.md)). From the repository root:
+Default local loop (Experiment 1 in [`docs/06_poc.md`](docs/06_poc.md)). From the repository root:
 
 ```bash
 python -m unittest discover -s tests
@@ -110,9 +110,9 @@ python -m src.leak_test data/poc/leak_fixture.jsonl data/poc/examples_train.json
 python -m src.evaluate --train_jsonl data/poc/examples_train.jsonl --test_jsonl data/poc/examples_val.jsonl --diag_jsonl data/poc/diag_val.jsonl --leak_jsonl data/poc/leak_fixture.jsonl --adapter_dir runs/poc/adapter --out_dir results/poc
 ```
 
-Use `--adapter_dir runs/poc_e3_lr1e4/adapter --out_dir results/poc_e3_lr1e4` for Run 2, or `--adapter_dir runs/smollm360m_e3/adapter --out_dir results/smollm360m_e3` for Run 3. Intermediate Trainer checkpoints are not uploaded here. Evaluate still downloads the base model from Hugging Face — [`Qwen/Qwen2.5-0.5B-Instruct`](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct) for Runs 1–2, or [`HuggingFaceTB/SmolLM2-360M-Instruct`](https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct) for Run 3 — and does not reload LoRA from a training run. The links identify the Hub checkpoints; do not save them into this repo. On first run, `evaluate` fetches them into the local Hugging Face cache. GPU is faster; CPU works but is slow. Run 3's published scores used JSONL rebuilt on Colab, so a local re-score of that adapter on `data/poc` will be close but not identical. The POC implements the **no-copy** condition. It uses non-overlapping waves 1–3 fields for the persona, keeps copy-last data in diagnostic files only, and never loads `full_persona` for model prompts.
+Use `--adapter_dir runs/poc_e3_lr1e4/adapter --out_dir results/poc_e3_lr1e4` for Experiment 2, or `--adapter_dir runs/smollm360m_e3/adapter --out_dir results/smollm360m_e3` for Experiment 3. Intermediate Trainer checkpoints are not uploaded here because of GitHub size limits; I will share a download link if requested. Evaluate still downloads the base model from Hugging Face — [`Qwen/Qwen2.5-0.5B-Instruct`](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct) for Experiments 1–2, or [`HuggingFaceTB/SmolLM2-360M-Instruct`](https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct) for Experiment 3 — and does not reload LoRA from a training run. The links identify the Hub checkpoints; do not save them into this repo. On first run, `evaluate` fetches them into the local Hugging Face cache. GPU is faster; CPU works but is slow. Experiment 3's published scores used JSONL rebuilt on Colab, so a local re-score of that adapter on `data/poc` will be close but not identical. The POC implements the **no-copy** condition. It uses non-overlapping waves 1–3 fields for the persona, keeps copy-last data in diagnostic files only, and never loads `full_persona` for model prompts.
 
-The reported runs are a local Qwen2.5-0.5B-Instruct schedule, a longer lower-LR Qwen schedule, and a Colab `SmolLM2-360M-Instruct` run that meets a strict `<0.5B` reading. The POC reports slice-level MAD accuracy, defined as one minus the absolute error divided by the train-only empirical range. Higher is better. It is not a reproduction of the official 17-task paper evaluation. See [`docs/06_poc.md`](docs/06_poc.md) for the three-run table, hardware notes, and interpretation rules.
+The reported experiments are a local Qwen2.5-0.5B-Instruct schedule, a longer lower-LR Qwen schedule, and a Colab `SmolLM2-360M-Instruct` run that meets a strict `<0.5B` reading. The POC reports slice-level MAD accuracy, defined as one minus the absolute error divided by the train-only empirical range. Higher is better. It is not a reproduction of the official 17-task paper evaluation. See [`docs/06_poc.md`](docs/06_poc.md) for the three-experiment table, hardware notes, and interpretation rules.
 
 ## Further work
 
