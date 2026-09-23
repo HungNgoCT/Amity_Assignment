@@ -142,7 +142,7 @@ The raw persona text is approximately 126k–134k characters, so placing it dire
 
 BM25 is the first retriever because survey terminology often repeats exactly and its matches are easy to inspect. A dense retriever is adopted only if validation ablations show a gain.
 
-**Planned training sequence budget: 4,096 tokens.** This is an initial engineering choice, not a fixed requirement of the dataset or model. It can be reduced when GPU memory or training throughput is constrained, or increased when hardware permits and validation experiments show that additional retrieved context improves prediction. Any change must remain within the base model's context limit, and the component budgets should be retuned without truncating the question or output schema.
+**Planned training sequence budget: 4,096 tokens.** I would use this length for 7B QLoRA on a single 24 GB GPU such as an RTX 3090/4090. It is long enough to pack the summary, retrieved persona chunks, and the full question, and short enough that a micro-batch of 1 with gradient checkpointing is intended to fit that card. This is an initial engineering choice, not a fixed requirement of the dataset or model. It can be reduced when GPU memory or training throughput is constrained, or increased when hardware permits and validation experiments show that additional retrieved context improves prediction. Any change must remain within the base model's context limit, and the component budgets should be retuned without truncating the question or output schema.
 
 | Component | Approximate budget |
 |---|---:|
