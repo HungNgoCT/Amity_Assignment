@@ -181,4 +181,4 @@ With more time I would keep this leakage-safe slice fixed and test the Discussio
 
 ## Deps (POC)
 
-`transformers` `peft` `accelerate` `bitsandbytes` `datasets` `pandas` `torch` — see `requirements.txt`. If `HF_HOME` is unset, the builder uses `data_raw/.cache/huggingface` when that folder exists. On Colab, uninstall the stock `torchao` as in the Run 3 commands.
+`transformers` `peft` `accelerate` `bitsandbytes` `datasets` `pandas` `torch` — see `requirements.txt`. If `HF_HOME` is unset, the builder uses `data_raw/.cache/huggingface` when that folder exists (Hugging Face cache only; anonymized wave files are under `raw_data/`). On Colab, uninstall the stock `torchao` as in the Run 3 commands.

@@ -34,6 +34,7 @@ MAX_PERSONA_CHARS = 3500
 
 
 def _hf_home() -> None:
+    # Optional local Hub cache only. Survey CSVs live in raw_data/, not here.
     if "HF_HOME" not in os.environ:
         local = Path(__file__).resolve().parents[2] / "data_raw" / ".cache" / "huggingface"
         if local.exists():

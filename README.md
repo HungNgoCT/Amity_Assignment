@@ -58,8 +58,7 @@ Deliverables 2–5 describe a research-scale system. Deliverable 6 is intentiona
 │   ├── wave4_response_label.csv       # Wave-4 label-form responses
 │   └── poc/                           # POC JSONL used for the reported runs
 │
-├── data_raw/
-│   └── raw_data/                      # Anonymized wave exports and questionnaires
+├── raw_data/                          # Anonymized wave CSVs and questionnaire/
 │
 ├── runs/                              # Final LoRA adapters and bundle manifests
 └── results/                           # Notebook export and POC metrics.json
