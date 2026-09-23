@@ -63,7 +63,7 @@ The following products directly answer what could use the model's capabilities a
 | Claim causal effects from twin-only experiments | Simulated potential outcomes are not randomized human outcomes; use them only to generate hypotheses for a human experiment |
 | Train other models on twin outputs as labels | Propagates and obscures survey and model bias; human responses should remain the ground-truth labels |
 
-Required line on any chart that leaves the research team:
+Note: Required line on any chart that leaves the research team:
 
 > Simulated survey responses. Not observed behavior. U.S. online panel, not population-weighted. Short-term evidence only: wave 4 launched approximately two weeks after wave 3, with longer intervals for items originating in earlier waves.
 
