@@ -1,0 +1,9 @@
+{
+  "bundle_id": "20260921-3e3eaf7",
+  "base_model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "qlora": true,
+  "train_examples": 10000,
+  "val_examples": 2000,
+  "epochs": 2,
+  "seed": 42
+}

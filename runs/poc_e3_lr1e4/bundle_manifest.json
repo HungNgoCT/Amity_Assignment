@@ -1,0 +1,36 @@
+{
+  "bundle_id": "20260923-3e3eaf7",
+  "base_model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "qlora": true,
+  "train_examples": 10000,
+  "val_examples": 2000,
+  "epochs": 3,
+  "per_device_batch_size": 4,
+  "gradient_accumulation_steps": 8,
+  "learning_rate": 0.0001,
+  "max_length": 2048,
+  "lora": {
+    "r": 16,
+    "alpha": 32,
+    "dropout": 0.05,
+    "target_modules": [
+      "q_proj",
+      "k_proj",
+      "v_proj",
+      "o_proj",
+      "gate_proj",
+      "up_proj",
+      "down_proj"
+    ]
+  },
+  "seed": 42,
+  "git_dirty": true,
+  "packages": {
+    "torch": "2.14.0+cu126",
+    "transformers": "5.17.0",
+    "peft": "0.21.0",
+    "datasets": "5.0.1",
+    "accelerate": "1.15.0",
+    "bitsandbytes": "0.50.2"
+  }
+}

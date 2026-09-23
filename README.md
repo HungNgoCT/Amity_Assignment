@@ -56,16 +56,16 @@ Deliverables 2–5 describe a research-scale system. Deliverable 6 is intentiona
 ├── data/
 │   ├── wave4_response.csv             # Wave-4 numeric responses
 │   ├── wave4_response_label.csv       # Wave-4 label-form responses
-│   └── poc/                           # Generated POC JSONL; ignored by Git
+│   └── poc/                           # POC JSONL used for the reported runs
 │
 ├── data_raw/
 │   └── raw_data/                      # Anonymized wave exports and questionnaires
 │
-├── runs/                              # Generated model adapters; ignored by Git
-└── results/                           # Generated notebook/POC outputs; ignored by Git
+├── runs/                              # Final LoRA adapters and bundle manifests
+└── results/                           # Notebook export and POC metrics.json
 ```
 
-The submission path is `docs/`, `notebooks/`, `src/`, and `tests/`. Generated JSONL, adapters, and metrics stay under `data/poc/`, `runs/`, and `results/` and are ignored by Git.
+The submission path is `docs/`, `notebooks/`, `src/`, `tests/`, plus the reported `data/poc/`, `runs/`, and `results/` artifacts so a reviewer can inspect scores or run evaluate without retraining. Intermediate `runs/**/checkpoint-*` folders stay ignored.
 
 ## Setup
 
@@ -103,7 +103,7 @@ python -m src.train --train_jsonl data/poc/examples_train.jsonl --val_jsonl data
 python -m src.evaluate --train_jsonl data/poc/examples_train.jsonl --test_jsonl data/poc/examples_val.jsonl --diag_jsonl data/poc/diag_val.jsonl --leak_jsonl data/poc/leak_fixture.jsonl --adapter_dir runs/poc/adapter --out_dir results/poc
 ```
 
-The first `build_jsonl` run downloads Twin-2K-500 catalog and CSV files from Hugging Face (internet required). The POC implements the **no-copy** condition. It uses non-overlapping waves 1–3 fields for the persona, keeps copy-last data in diagnostic files only, and never loads `full_persona` for model prompts.
+Reported JSONL, final adapters, and `metrics.json` are in the repo. To inspect scores, open `results/*/metrics.json`. To re-score without retraining, skip `build_jsonl` and `train` and run evaluate against the matching `runs/<run>/adapter`. Rebuilding JSONL still needs Hugging Face (internet). The POC implements the **no-copy** condition. It uses non-overlapping waves 1–3 fields for the persona, keeps copy-last data in diagnostic files only, and never loads `full_persona` for model prompts.
 
 The reported runs are a local Qwen2.5-0.5B-Instruct schedule, a longer lower-LR Qwen schedule, and a Colab `SmolLM2-360M-Instruct` run that meets a strict `<0.5B` reading. The POC reports slice-level MAD accuracy, defined as one minus the absolute error divided by the train-only empirical range. Higher is better. It is not a reproduction of the official 17-task paper evaluation. See [`docs/06_poc.md`](docs/06_poc.md) for the three-run table, hardware notes, and interpretation rules.
 

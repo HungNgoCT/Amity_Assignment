@@ -8,11 +8,8 @@ venv/
 # Jupyter
 .ipynb_checkpoints/
 
-# Generated outputs (re-run the notebook / POC)
-results/
-*.xlsx
-data/poc/
-runs/
+# Intermediate Trainer checkpoints (optimizer states; not needed to evaluate)
+runs/**/checkpoint-*/
 
 # Hugging Face cache (hundreds of MB; GitHub file limit is 100MB)
 data_raw/.cache/

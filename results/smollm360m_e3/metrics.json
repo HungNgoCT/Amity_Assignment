@@ -1,0 +1,66 @@
+{
+  "n_test": 2000,
+  "range_source": "train-only empirical \u2014 not the official MAD script",
+  "baselines": {
+    "random": {
+      "slice_mean_mad": 0.5256420634920635,
+      "n_people": 100,
+      "parse_rate": 1.0,
+      "n_total": 2000,
+      "by_type_mad": {
+        "MC": 0.5256420634920634
+      },
+      "by_type_exact": {
+        "MC": 0.4545
+      }
+    },
+    "train_majority": {
+      "slice_mean_mad": 0.5953515873015873,
+      "n_people": 100,
+      "parse_rate": 1.0,
+      "n_total": 2000,
+      "by_type_mad": {
+        "MC": 0.5953515873015874
+      },
+      "by_type_exact": {
+        "MC": 0.5425
+      }
+    },
+    "copy_last": {
+      "slice_mean_mad": 0.8564976190476189,
+      "n_people": 100,
+      "parse_rate": 0.9985,
+      "n_total": 2000,
+      "by_type_mad": {
+        "MC": 0.8564976190476191
+      },
+      "by_type_exact": {
+        "MC": 0.8045
+      }
+    }
+  },
+  "ceiling_copy_last": {
+    "slice_mean_mad": 0.8564976190476189,
+    "n_people": 100,
+    "parse_rate": 0.9985,
+    "n_total": 2000,
+    "by_type_mad": {
+      "MC": 0.8564976190476191
+    },
+    "by_type_exact": {
+      "MC": 0.8045
+    }
+  },
+  "model": {
+    "slice_mean_mad": 0.4775432539682539,
+    "n_people": 100,
+    "parse_rate": 1.0,
+    "n_total": 2000,
+    "by_type_mad": {
+      "MC": 0.477543253968254
+    },
+    "by_type_exact": {
+      "MC": 0.4145
+    }
+  }
+}

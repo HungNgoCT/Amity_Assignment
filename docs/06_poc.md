@@ -17,9 +17,9 @@ src/baselines.py           # random, majority, copy-last (never fills missing wi
 src/train.py               # QLoRA SFT; default Qwen2.5-0.5B-Instruct
 src/evaluate.py            # baselines + optional adapter
 tests/test_poc.py          # 7 unit tests
-data/poc/*.jsonl           # generated; not committed
-runs/<run>/adapter         # PEFT files; sibling bundle_manifest.json; not committed (Run 3 download sits flat under runs/smollm360m_e3/)
-results/<run>/metrics.json # generated after evaluate; not committed
+data/poc/*.jsonl           # reported-run JSONL; committed
+runs/<run>/adapter         # final PEFT files; sibling bundle_manifest.json; committed
+results/<run>/metrics.json # after evaluate; committed
 ```
 
 This POC implements Deliverable 2's **no-copy** condition. Persona = non-overlap CSV fields only (demographics first, capped). One JSONL row = one `(pid, column)`. Person split, seed `20250319`, 70 / 15 / 15. Default slice: **MC only**, 500 train pids × ≤20 items, 100 val and 100 test pids (this report scores validation). The random baseline samples uniformly from each column's train-observed answer codes. Copy-last diagnostics live in `diag_*.jsonl`, never in the prompt. Leak check is on the **persona** span: the QID154 stem itself says “70 lawyers”.
@@ -136,15 +136,15 @@ python -m src.train --train_jsonl data/poc/examples_train.jsonl --val_jsonl data
 python -m src.evaluate --train_jsonl data/poc/examples_train.jsonl --test_jsonl data/poc/examples_val.jsonl --diag_jsonl data/poc/diag_val.jsonl --leak_jsonl data/poc/leak_fixture.jsonl --adapter_dir /content/runs/smollm360m_e3/adapter --out_dir /content/results/smollm360m_e3
 ```
 
-Train, leak checks, and evaluate for this run were all executed on Colab. Nothing in this run was trained or scored on the local machine. After Colab finished, I copied the outputs to Google Drive and downloaded them: `metrics.json` to `results/smollm360m_e3/`, and the saved adapter plus `bundle_manifest.json` to `runs/smollm360m_e3/`. On Colab the trainer wrote the adapter under `/content/runs/smollm360m_e3/adapter`; the download places those PEFT files directly in `runs/smollm360m_e3/` (`adapter_config.json`, `adapter_model.safetensors`, `tokenizer.json`, `tokenizer_config.json`), with `bundle_manifest.json` beside them. Both `runs/` and `results/` are gitignored, so this download is a local archive, not part of the public repo. JSONL was rebuilt on Colab, so baselines are not identical to Runs 1–2.
+Train, leak checks, and evaluate for this run were all executed on Colab. Nothing in this run was trained or scored on the local machine. After Colab finished, I copied the outputs to Google Drive and downloaded them. The Drive copy placed PEFT files flat in `runs/smollm360m_e3/`; in this repository they sit under `runs/smollm360m_e3/adapter` with `bundle_manifest.json` beside that folder, matching Runs 1–2. JSONL was rebuilt on Colab, so baselines are not identical to Runs 1–2.
 
 - Base model: `HuggingFaceTB/SmolLM2-360M-Instruct`
 - Fine-tune: QLoRA (4-bit NF4 base + LoRA adapters, rank 16, alpha 32, dropout 0.05)
 - Epochs / learning rate: `4` / `1e-4`
 - Training wall time: about `3` hours
 - Hardware: Colab T4
-- Adapter: trained at `/content/runs/smollm360m_e3/adapter` on Colab; downloaded to `runs/smollm360m_e3` (PEFT files sit in this folder, not under `adapter/`)
-- Source: `results/smollm360m_e3/metrics.json` and `runs/smollm360m_e3/bundle_manifest.json` (Colab → Drive → local download; JSONL rebuilt on Colab, so baselines are not identical to Run 1)
+- Adapter: `runs/smollm360m_e3/adapter` (trained on Colab at `/content/runs/smollm360m_e3/adapter`)
+- Source: `results/smollm360m_e3/metrics.json` and `runs/smollm360m_e3/bundle_manifest.json` (Colab → Drive → repo; JSONL rebuilt on Colab, so baselines are not identical to Run 1)
 - Uniform random: slice MAD `0.5256`; MC exact match `0.4545`; parse rate `100.00%`; people `100`
 - Train majority: slice MAD `0.5954`; MC exact match `0.5425`; parse rate `100.00%`; people `100`
 - Copy-last / same-pair human benchmark: slice MAD `0.8565`; MC exact match `0.8045`; coverage/parse rate `99.85%`; people `100`
