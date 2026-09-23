@@ -84,7 +84,7 @@ Never train on model-generated response codes as human ground truth. Moving a pr
 
 #### 2.4 Versioning
 
-Every release is an immutable, content-addressed bundle. Record the Hugging Face (HF) revision and comma-separated value (CSV) file hashes rather than relying on mutable filenames. Capturing code, data, configuration, and downstream dependencies together reduces the hidden technical debt created by undeclared machine-learning system dependencies (Sculley et al., 2015).
+Every release is an immutable, content-addressed bundle. Record the Hugging Face (HF) revision and comma-separated values (CSV) file hashes rather than relying on mutable filenames. Capturing code, data, configuration, and downstream dependencies together reduces the hidden technical debt created by undeclared machine-learning system dependencies (Sculley et al., 2015).
 
 ```text
 bundle_id:  YYYYMMDD-<short-hash>

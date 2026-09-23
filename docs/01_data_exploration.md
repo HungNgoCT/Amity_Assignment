@@ -22,10 +22,11 @@
 
 1. **Dataset structure / two HF subsets.**
 
-   Twin-2K-500 = four-wave US survey. On Hugging Face, `load_dataset` has **two subsets**: `full_persona` and `wave_split`. Other dataset artifacts—including the catalog, comma-separated value (CSV) response files, large language model (LLM) outputs, and raw Qualtrics exports—are provided as separate files.
+   Twin-2K-500 = four-wave US survey. On Hugging Face, `load_dataset` has **two subsets**: `full_persona` and `wave_split`. Other dataset artifacts—including the catalog, comma-separated values (CSV) response files, large language model (LLM) outputs, and raw Qualtrics exports—are provided as separate files.
 
    **`full_persona`** = table (**2,058 rows × 4 columns**), with one row per participant identifier (`pid`) and their survey responses.
-   - 4 columns = `pid`; `persona_text` (~126k–134k characters); `persona_summary` (~12k–18k characters); `persona_json`.
+   - 4 columns = `pid`; `persona_text`; `persona_summary`; `persona_json`.
+   - Across all 2,058 rows, `persona_text` is **125,622–133,627** characters (median 128,665) and `persona_summary` is **11,602–18,482** characters (median 12,993). The paper and dataset card do not report these lengths; the notebook computes them on the pinned dataset revision.
    - The dataset card describes `persona_text` and `persona_json` as item-level survey Q–A in prose and structured JavaScript Object Notation (JSON) formats. Both merge waves 1–3 with wave 4 into one profile; for repeated questions, wave 4 replaces the earlier answer.
    - For the first few participants inspected, `persona_summary` is a prose profile containing demographics, derived scores, and selected self-descriptions—not a question-by-question response list. It is available only in `full_persona` and **not** a column on `wave_split`.
    - Spot check: For **pid=1**, the earlier `QID154` response in waves 1–3 was 70, while the wave-4 response was 82. Both `persona_json` (`Values: ['82']`) and `persona_text` (`Answer: 82`) contain the wave-4 response, so they would leak the prediction target. `persona_summary` does not expose this item in this example, but one case is insufficient to establish that it is leakage-safe.
@@ -55,14 +56,14 @@
    | **~500** | Questions administered across waves 1–3 |
    | **760** | Response columns after matrix rows and multi-select options are expanded |
 
-   The full catalog contains **175 Multiple Choice (MC)**, **36 Matrix**, **28 Text Entry (TE)**, **14 Display/Instruction (DB)**, and **3 Slider** QuestionIDs. The held-out wave-4 set contains **84 QuestionIDs**: 68 MC, 7 Matrix, 6 TE, and 3 Slider; DB screens are not prediction targets. A response column is mapped to its question type through the catalog's `csv_columns` field.
+   The full catalog contains **175 Multiple Choice (MC)**, **36 Matrix**, **28 Text Entry (TE)**, **14 Display/Instruction (DB)**, and **3 Slider** QuestionIDs. The held-out wave-4 set contains **84 QuestionIDs**: 68 MC, 7 Matrix, 6 TE, and 3 Slider; DB screens are not prediction targets. The paper describes 88 holdout questions across 17 tasks. I have not reconciled that count with these 84 QuestionIDs and 126 response columns; the two units may differ. A response column is mapped to its question type through the catalog's `csv_columns` field.
 
    Proposed scoring by question type:
    - **154 single-choice MC QuestionIDs in the full catalog** (68 of the 84 wave-4 QuestionIDs): exact-match accuracy—the predicted option either matches or does not (e.g., target = option 3, prediction = option 3 → correct).
    - **Multi-select MC (21 in the full catalog; 0 of the 126 wave-4 scored columns):** Jaccard similarity measures the overlap between the predicted and selected option sets (e.g., target = `{A, C}`, prediction = `{A, B}` → overlap `{A}` divided by combined set `{A, B, C}` = **1/3**). Per-option F1 can be reported as a diagnostic: treat each choice as a yes/no (selected or not) and score that binary decision. This take-home does not compute it, because no multi-select column appears in the wave-4 scored set.
    - **Ordered Matrix responses:** ordinal mean absolute error (MAE)—the average distance between the predicted and target scale values—and a range-normalized accuracy score (e.g., target Likert score = 5, prediction = 3 → error = **2 points**).
    - **Slider:** MAE in the original scale and range-normalized accuracy (e.g., `QID154`: wave-4 target = 82, prediction = 70 → MAE = **12** and normalized accuracy = `1 − 12/100` = **0.88**). Exact match is too strict for a 0–100 slider.
-   - **Numeric TE / anchoring:** MAE; following the paper, unbounded numerical answers are converted into ten ordered groups (deciles) before scoring. Two answers in the same decile have zero decile distance. Free-form text is not part of the held-out wave-4 item set and would require a separate scoring rubric.
+   - **Numeric TE / anchoring:** MAE; following the paper, unbounded numerical answers are converted into ten ordered groups (deciles) from wave-2 answers before scoring. Two answers in the same decile have zero decile distance. Free-form text is not part of the held-out wave-4 item set and would require a separate scoring rubric.
    - **DB:** instruction-only screens with no response columns, such as a page explaining the study procedure, so they are excluded.
 
    The main metric used to compare the model with the paper's **81.72% human test–retest consistency across 17 tasks** is range-normalized accuracy: `1 − |prediction − target| / response range`. A score of 1 means an exact match; lower scores mean larger errors. The type-specific metrics above are also reported to show where the model performs well or poorly. Full evaluation details are in Deliverable 3.

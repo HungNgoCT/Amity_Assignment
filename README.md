@@ -26,7 +26,6 @@ Deliverables 2–5 describe a research-scale system. Deliverable 6 is intentiona
 ```text
 .
 ├── README.md
-├── Research_Engineer_Assignment.pdf   # Original assignment
 ├── requirements.txt                   # Notebook and POC dependencies
 │
 ├── docs/
@@ -110,9 +109,9 @@ python -m src.leak_test data/poc/leak_fixture.jsonl data/poc/examples_train.json
 python -m src.evaluate --train_jsonl data/poc/examples_train.jsonl --test_jsonl data/poc/examples_val.jsonl --diag_jsonl data/poc/diag_val.jsonl --leak_jsonl data/poc/leak_fixture.jsonl --adapter_dir runs/poc/adapter --out_dir results/poc
 ```
 
-Use `--adapter_dir runs/poc_e3_lr1e4/adapter --out_dir results/poc_e3_lr1e4` for Experiment 2, or `--adapter_dir runs/smollm360m_e3/adapter --out_dir results/smollm360m_e3` for Experiment 3. Intermediate Trainer checkpoints are not uploaded here because of GitHub size limits; I will share a download link if requested. If the base model is not already cached, the code downloads it automatically on the first `evaluate` run: [`Qwen/Qwen2.5-0.5B-Instruct`](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct) for Experiments 1–2, or [`HuggingFaceTB/SmolLM2-360M-Instruct`](https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct) for Experiment 3. It does not reload LoRA from a training run. GPU is faster; CPU works but is slow. Experiment 3's published scores used JSONL rebuilt on Colab, so a local re-score of that adapter on `data/poc` will be close but not identical. The POC implements the **no-copy** condition. It uses non-overlapping waves 1–3 fields for the persona, keeps copy-last data in diagnostic files only, and never loads `full_persona` for model prompts.
+Use `--adapter_dir runs/poc_e3_lr1e4/adapter --out_dir results/poc_e3_lr1e4` for Experiment 2. That directory name means 3 epochs, not Experiment 3. Use `--adapter_dir runs/smollm360m_e3/adapter --out_dir results/smollm360m_e3` for Experiment 3. Intermediate Trainer checkpoints are not uploaded here because of GitHub size limits; I will share a download link if requested. If the base model is not already cached, the code downloads it automatically on the first `evaluate` run: [`Qwen/Qwen2.5-0.5B-Instruct`](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct) for Experiments 1–2, or [`HuggingFaceTB/SmolLM2-360M-Instruct`](https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct) for Experiment 3. It does not reload LoRA from a training run. GPU is faster; CPU works but is slow. Experiment 3's published scores used JSONL rebuilt on Colab, so a local re-score of that adapter on `data/poc` will be close but not identical. The POC implements the **no-copy** condition. It uses non-overlapping waves 1–3 fields for the persona, written as unlabeled column codes such as `QID12: 2`, keeps copy-last data in diagnostic files only, and never loads `full_persona` for model prompts.
 
-The reported experiments are a local Qwen2.5-0.5B-Instruct schedule, a longer lower-LR Qwen schedule, and a Colab `SmolLM2-360M-Instruct` run that meets a strict `<0.5B` reading. The POC reports slice-level MAD accuracy, defined as one minus the absolute error divided by the train-only empirical range. Higher is better. It is not a reproduction of the official 17-task paper evaluation. See [`docs/06_poc.md`](docs/06_poc.md) for the three-experiment table, hardware notes, and interpretation rules.
+The reported experiments are a local Qwen2.5-0.5B-Instruct schedule, a longer lower-LR Qwen schedule, and a Colab `SmolLM2-360M-Instruct` run. Both published base-model counts are under 0.5B. The POC reports slice-level MAD accuracy, defined as one minus the absolute error divided by the train-only empirical range. Higher is better. It is not a reproduction of the official 17-task paper evaluation. See [`docs/06_poc.md`](docs/06_poc.md) for the three-experiment table, hardware notes, and interpretation rules.
 
 ## Further work
 

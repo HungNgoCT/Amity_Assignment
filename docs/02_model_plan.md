@@ -2,7 +2,7 @@
 
 This document describes the model I would build, not a claim that the complete system has already been trained. The goal is to adapt a public instruction-tuned language model to predict one participant's held-out wave-4 response from a leakage-safe representation of that participant's waves 1–3 data.
 
-This is a full-scale plan for a longer-term research project with sufficient time and compute for systematic data validation, model training, ablation studies, and error analysis. It is intentionally broader than the optional Deliverable 6 proof of concept (POC). Because the take-home assignment is time-limited, that POC uses a small model and a smaller data slice to demonstrate that the leakage-safe training and evaluation pipeline works end to end. The assignment asks for a model with fewer than 0.5B parameters, so I first chose `HuggingFaceTB/SmolLM2-360M-Instruct`. That run scored too low on the slice, so I then tried `Qwen/Qwen2.5-0.5B-Instruct` and treat it as the default local checkpoint. Transformers counts about 630M base parameters for that Qwen model; Deliverable 6 discloses this and reports both runs. The POC does not attempt to implement or validate every component of the 7B-scale research plan below.
+This is a full-scale plan for a longer-term research project with sufficient time and compute for systematic data validation, model training, ablation studies, and error analysis. It is intentionally broader than the optional Deliverable 6 proof of concept (POC). Because the take-home assignment is time-limited, that POC uses a small model and a smaller data slice to demonstrate that the leakage-safe training and evaluation pipeline works end to end. The assignment asks for a model with fewer than 0.5B parameters, so I first chose `HuggingFaceTB/SmolLM2-360M-Instruct`. That run scored too low on the slice, so I then tried `Qwen/Qwen2.5-0.5B-Instruct` and treat it as the default local checkpoint. The Qwen model card reports 0.49B parameters with tied embeddings, which is under 0.5B; Deliverable 6 explains why a raw Transformers count is higher and reports both runs. The POC does not attempt to implement or validate every component of the 7B-scale research plan below.
 
 The central design is:
 
@@ -19,7 +19,7 @@ The model is shared across participants; it is not one separately trained model 
 
 **Unit of prediction.** One example is one `(pid, response column)` pair, where `pid` is the participant identifier: a leakage-safe persona, one held-out wave-4 question, and one target answer. A response column (for example, `QID154` or `QID287_1`) is the scoring unit; one Qualtrics QuestionID may expand into several response columns.
 
-The held-out set contains **126 response columns** mapped through the catalog's `csv_columns` field to **84 QuestionIDs**: 68 Multiple Choice (MC), 7 Matrix, 6 Text Entry (TE), and 3 Slider. Display/Instruction (DB) screens have no response columns and are excluded. These are exploratory data analysis (EDA) counts, not figures reported by the paper.
+The held-out set contains **126 response columns** mapped through the catalog's `csv_columns` field to **84 QuestionIDs**: 68 Multiple Choice (MC), 7 Matrix, 6 Text Entry (TE), and 3 Slider. Display/Instruction (DB) screens have no response columns and are excluded. These are exploratory data analysis (EDA) counts, not figures reported by the paper. The paper's 88 holdout questions are a different unit, and I have not reconciled them with these 84 QuestionIDs.
 
 **Two interpretations of the historical answers.** The assignment can reasonably be read in two ways. An earlier answer to the same question is temporally valid waves 1–3 history, not a future-label leak. However, allowing it creates a strong copy-last shortcut and changes the question from whether the model can infer an unseen response from the rest of the persona to whether it can update a known prior response. I would therefore report both conditions and never mix them within one result:
 
@@ -126,9 +126,9 @@ A tabular multilayer perceptron (MLP) over safe non-overlap columns is a useful 
 
 ---
 
-## 4. Long personae and the context window
+## 4. Long personas and the context window
 
-The raw persona text is approximately 126k–134k characters, so placing it directly in every prompt would be expensive, difficult to audit, and likely to bury relevant evidence. A long context window does not remove those problems.
+The raw `persona_text` is 125,622–133,627 characters across the 2,058 participants (median 128,665; Deliverable 1). Placing it directly in every prompt would be expensive, difficult to audit, and likely to bury relevant evidence. A long context window does not remove those problems.
 
 **Deterministic summary.** Build a compact summary under the declared input condition. Both conditions may summarize safe non-overlap fields such as stable demographics, aggregate psychological-scale scores computed from permitted items, broad preferences, and selected cognitive measures. In full-history, repeated-item answers may be added in a separately labeled historical section; they remain absent in no-copy. Store field provenance with every summary value so it can be audited. Budget: approximately **400–600 tokens**.
 
@@ -209,7 +209,7 @@ Assistant:
 
 At inference time, decoding is greedy and schema-constrained where possible: MC outputs are restricted to legal codes, sliders are parsed and range-validated, and invalid outputs are counted as failures rather than silently dropped. The generated explanation is suppressed because the evaluation target is the answer, not a rationale.
 
-**NOTE**: The optional bonus POC applies the no-copy version of the same objective to a small model and a smaller data slice. I first used SmolLM2-360M-Instruct to stay under 0.5B; after that run scored too low, the default local checkpoint became `Qwen2.5-0.5B-Instruct`, with the parameter-count deviation disclosed in Deliverable 6. That prototype is a demonstration of the loop, not the primary architecture proposed here.
+**NOTE**: The optional bonus POC applies the no-copy version of the same objective to a small model and a smaller data slice. I first used SmolLM2-360M-Instruct to stay under 0.5B; after that run scored too low, the default local checkpoint became `Qwen2.5-0.5B-Instruct`. Its model card reports 0.49B parameters. Deliverable 6 records why a raw Transformers count is higher. That prototype is a demonstration of the loop, not the primary architecture proposed here.
 
 ---
 

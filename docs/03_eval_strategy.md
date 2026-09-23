@@ -27,7 +27,7 @@ Modeling recipe: `docs/02_model_plan.md`. The summary answers those five points;
 
 4. **Leakage.** Repeating the same question text on wave 4 is not leakage. Putting the **wave-4 answer** into the model input is leakage. For example, for participant identifier (`pid`) 1 / `QID154`: the person first answered **70**, then **82** on wave 4. `full_persona` already stores **82**, so that field cannot be used as the persona. `wave4_Q_wave4_A` is the held-out question plus that same **82**; if those `Answers` are not stripped, the prompt contains the target and that is leakage. The earlier **70** is history, not a future label: withhold it in no-copy, allow it in full-history. Each training or inference sequence contains only one held-out wave-4 item, so a later item cannot see an earlier gold or predicted wave-4 answer.
 
-5. **Acceptance.** Leakage and input-condition checks are hard gates. Deliverable 6 reports slice MAD versus random and parse rate. Stronger follow-up: at least **0.01 MAD** (can change) above mean random, so a tiny win over chance does not count, and **80%** parse rate (can change), so most outputs are usable. Scale to 7B if validation confidence interval (CI) lower bounds beat train-majority and question-only (and copy-last on changed-answer items for full-history). Research-scale target: test MAD / test-split human ≥ **0.80** (can change). These are my choices, not paper values; freeze them until the next cycle. An above-benchmark result triggers a dedicated leakage audit.
+5. **Acceptance.** Leakage and input-condition checks are hard gates. Deliverable 6 reports slice MAD versus random and parse rate. Stronger follow-up: at least **0.01 MAD** above mean random, so a tiny win over chance does not count, and **80%** parse rate, so most outputs are usable. Scale to 7B if validation confidence interval (CI) lower bounds beat train-majority and question-only (and copy-last on changed-answer items for full-history). Research-scale target: test MAD / test-split human ≥ **0.80**. These are my choices, not paper values; freeze them until the next cycle. An above-benchmark result triggers a dedicated leakage audit.
 
 ---
 
@@ -52,7 +52,7 @@ For each scored column, MAD uses a response range R_c = max − min. Take those 
 
 acc(i, c) = 1 − |ŷ(i,c) − y(i,c)| / R_c
 
-only where y(i,c) is non-null. Binary items have R = 1, so this equals exact match. Unbounded anchoring is converted to deciles 1–10. For model selection, fit those deciles on train-pid waves 1–3 values and freeze them. The official script uses the loaded waves 1–3 evaluation population instead, so I would also run a separately labeled **paper-replication** pass and not treat the two numbers as identical.
+only where y(i,c) is non-null. Binary items have R = 1, so this equals exact match. Unbounded anchoring is converted to deciles 1–10. The paper builds those cutpoints from wave-2 answers. In the pinned official script, those answers are columns `Q164`, `Q166`, `Q168`, and `Q170` of `responses_wave1_3_formatted.csv`, and the cutpoints are fit on the evaluation respondents loaded by that script, not on a train-only subset. For model selection, I would fit the same wave-2 columns on train pids only and freeze them. A separately labeled **paper-replication** pass should follow the official script, and the two numbers should not be treated as identical.
 
 Worked example (pid=1, `QID154`, range 0–100): human 70 vs 82 → MAD acc 1 − 12/100 = 0.88. Exact-match = 0. Only MAD shares a scale with MC accuracy.
 
@@ -70,7 +70,7 @@ Worked example (pid=1, `QID154`, range 0–100): human 70 vs 82 → MAD acc 1 �
 | **Copy-last** | Wave 4 = earlier value of that column | Diagnostic for no-copy. Direct trivial baseline for full-history, which must add value where humans **changed** |
 | Uniform random | Integer drawn uniformly from each column's legal range | Floor. Mean over 100 fixed seeds |
 | Train majority | Train-set mode per column | “Ignore the persona” |
-| Hugging Face precomputed large language model (LLM) comma-separated value (CSV) files | Official GPT / Gemini dumps | Use only after leakage provenance checks; not a row unless those checks pass |
+| Hugging Face precomputed large language model (LLM) comma-separated values (CSV) files | Official GPT / Gemini dumps | Use only after leakage provenance checks; not a row unless those checks pass |
 | Question-only / summary-only / summary + retrieval | Frozen prompts with increasing persona information | Ablations before fine-tuning |
 | Tabular multilayer perceptron (MLP) | Safe non-overlap columns, train pids only | Neural baseline for known columns |
 | Persona-shuffling | Pair person A's persona with person B's wave-4 items | If the score does not fall, the model is not using individual information |
@@ -117,7 +117,7 @@ Assert on parsed fields, not raw substrings: the QID154 question stem itself con
 
 #### 5. Explicit acceptance criteria
 
-The Deliverable 6 proof of concept (POC) may be weak, but it may not skip leakage or input-condition gates. The numbers below are my engineering choices (can change). Once chosen, they stay frozen until the next evaluation cycle; they are not Twin-2K-500 standards.
+The Deliverable 6 proof of concept (POC) may be weak, but it may not skip leakage or input-condition gates. The numbers below are my engineering choices. Once chosen, they stay frozen until the next evaluation cycle; they are not Twin-2K-500 standards.
 
 | Gate | Pass | Fail |
 |---|---|---|
