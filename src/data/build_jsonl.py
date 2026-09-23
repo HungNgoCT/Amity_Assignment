@@ -26,6 +26,7 @@ from huggingface_hub import hf_hub_download
 from src.leak_test import LEAK_COL, LEAK_PID, assert_prompts_leak_free
 
 REPO_ID = "LLM-Digital-Twin/Twin-2K-500"
+DATASET_REVISION = "f883165a3026fde855dfd448e0cd16443ab257b6"
 SEED = 20250319
 SPLIT = (0.70, 0.15, 0.15)
 SYSTEM = "You are simulating one survey respondent."
@@ -41,12 +42,15 @@ def _hf_home() -> None:
 
 def load_raw() -> dict[str, Any]:
     _hf_home()
-    wave_split = load_dataset(REPO_ID, "wave_split")["data"].to_pandas()
+    wave_split = load_dataset(
+        REPO_ID, "wave_split", revision=DATASET_REVISION
+    )["data"].to_pandas()
     wave_split["pid"] = pd.to_numeric(wave_split["pid"], errors="raise").astype("int64")
 
     catalog_path = hf_hub_download(
         repo_id=REPO_ID,
         repo_type="dataset",
+        revision=DATASET_REVISION,
         filename="question_catalog_and_human_response_csv/question_catalog.json",
     )
     with open(catalog_path, encoding="utf-8") as f:
@@ -56,6 +60,7 @@ def load_raw() -> dict[str, Any]:
         hf_hub_download(
             repo_id=REPO_ID,
             repo_type="dataset",
+            revision=DATASET_REVISION,
             filename="question_catalog_and_human_response_csv/wave1_3_response.csv",
         )
     )
@@ -63,6 +68,7 @@ def load_raw() -> dict[str, Any]:
         hf_hub_download(
             repo_id=REPO_ID,
             repo_type="dataset",
+            revision=DATASET_REVISION,
             filename="question_catalog_and_human_response_csv/wave4_response.csv",
         )
     )
@@ -92,7 +98,7 @@ def _fmt_target(val: Any) -> str:
 
 
 def persona_from_table(row: pd.Series, keep_cols: list[str]) -> str:
-    """Short waves 1–3 profile from non-overlap CSV columns only (D2 §2.4)."""
+    """Short waves 1–3 profile from non-overlap CSV columns only (D2 §4)."""
     lines = ["Waves 1-3 profile (no wave-4 items):"]
     for col in keep_cols:
         if col not in row.index:
@@ -119,7 +125,7 @@ def persona_keep_columns(w13: pd.DataFrame, overlap: set[str], catalog: list[dic
             demo_cols.extend(cols)
         else:
             other.extend(cols)
-    # Demographics first (D2 §2.4 summary), then a cap of other non-overlap fields.
+    # Demographics first (D2 §4 summary), then a cap of other non-overlap fields.
     seen: set[str] = set()
     ordered: list[str] = []
     for c in demo_cols + other:
@@ -248,7 +254,7 @@ def main() -> None:
     out = Path(args.out_dir)
     (out / "splits").mkdir(parents=True, exist_ok=True)
 
-    print("Loading wave_split + catalog + CSVs (never full_persona)...")
+    print(f"Loading wave_split + catalog + CSVs (never full_persona); revision {DATASET_REVISION}")
     raw = load_raw()
     col_index = column_index(raw["catalog"])
     overlap = overlap_columns(raw["w13"], raw["w4"])

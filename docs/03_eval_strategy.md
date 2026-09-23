@@ -94,7 +94,7 @@ If model MAD exceeds the human benchmark on many items, run §2.4 and verify the
 
 #### 2.3 Train / test protocol
 
-- Shuffle unique `pid`s using the fixed random seed **`20250319`** so the split is reproducible, then assign **70% / 15% / 15%** to train, validation, and test (~1,440 / 309 / 309 participants).
+- Shuffle unique `pid`s using the fixed random seed **`20250319`** so the split is reproducible, then assign **70% / 15% / 15%** to train, validation, and test. With `int(n * ratio)` and the remainder going to test, 2,058 participants become **1,440 / 308 / 310**.
 - No person in two splits. All wave-4 columns for a pid travel together. A random **row** split would put the same person’s other wave-4 items in train.
 - Example grain: `(pid, column)` with non-null wave-4 label.
 - Freeze `input_condition=no_copy|full_history` before building prompts and never pool results across the two conditions.

@@ -2,7 +2,7 @@
 
 This document describes the model I would build, not a claim that the complete system has already been trained. The goal is to adapt a public instruction-tuned language model to predict one participant's held-out wave-4 response from a leakage-safe representation of that participant's waves 1–3 data.
 
-This is a full-scale plan for a longer-term research project with sufficient time and compute for systematic data validation, model training, ablation studies, and error analysis. It is intentionally broader than the optional Deliverable 6 proof of concept (POC). Because the take-home assignment is time-limited, that POC uses a model below 0.5B parameters and a smaller data slice to demonstrate that the leakage-safe training and evaluation pipeline works end to end. It does not attempt to implement or validate every component of the 7B-scale research plan below.
+This is a full-scale plan for a longer-term research project with sufficient time and compute for systematic data validation, model training, ablation studies, and error analysis. It is intentionally broader than the optional Deliverable 6 proof of concept (POC). Because the take-home assignment is time-limited, that POC uses a small model and a smaller data slice to demonstrate that the leakage-safe training and evaluation pipeline works end to end. The default local checkpoint is `Qwen/Qwen2.5-0.5B-Instruct` (Transformers counts about 630M base parameters; Deliverable 6 discloses this). A strict `<0.5B` Colab run uses `HuggingFaceTB/SmolLM2-360M-Instruct`. The POC does not attempt to implement or validate every component of the 7B-scale research plan below.
 
 The central design is:
 
@@ -207,7 +207,7 @@ Assistant:
 
 At inference time, decoding is greedy and schema-constrained where possible: MC outputs are restricted to legal codes, sliders are parsed and range-validated, and invalid outputs are counted as failures rather than silently dropped. The generated explanation is suppressed because the evaluation target is the answer, not a rationale.
 
-**NOTE**: The optional bonus POC applies the no-copy version of the same objective to a model strictly below 0.5B parameters and a smaller data slice. That prototype is a demonstration of the loop, not the primary architecture proposed here.
+**NOTE**: The optional bonus POC applies the no-copy version of the same objective to a small model and a smaller data slice. The default local run uses `Qwen2.5-0.5B-Instruct` with a disclosed parameter count above 0.5B; the strict `<0.5B` run uses SmolLM2-360M-Instruct. That prototype is a demonstration of the loop, not the primary architecture proposed here.
 
 ---
 

@@ -4,9 +4,9 @@ This is a **runnable slice**, not a reproduction of Toubia et al. Figure 2. The 
 
 **Not verified:** official 17-task MAD script / paper **81.72%**. The results below are slice-mean MAD with **train-only** empirical ranges and are not directly comparable with the paper's score.
 
-**References:** D2 §2 data pipeline and §5 training details (`docs/02_model_plan.md`); D3 §2.3 split protocol and §2.5 acceptance criteria (`docs/03_eval_strategy.md`). Default local checkpoint: `Qwen/Qwen2.5-0.5B-Instruct`. The strict `<0.5B` Colab run uses `HuggingFaceTB/SmolLM2-360M-Instruct`.
+**References:** D2 §2 data pipeline and §5 training details (`docs/02_model_plan.md`); D3 §2.3 train / test protocol and §2.5 acceptance criteria (`docs/03_eval_strategy.md`). Default local checkpoint: `Qwen/Qwen2.5-0.5B-Instruct`. The strict `<0.5B` Colab run uses `HuggingFaceTB/SmolLM2-360M-Instruct`. The JSONL builder pins Hugging Face revision `f883165a3026fde855dfd448e0cd16443ab257b6`, the same revision as the Deliverable 1 notebook.
 
-**Model-size disclosure:** the assignment asks for a model with **fewer than 0.5B parameters**. Although Qwen markets this checkpoint as “0.5B,” the current Transformers environment counts `630,167,424` base parameters; this LoRA configuration adds `8,798,208`, for `638,965,632` total parameters (`8,798,208` trainable). Therefore, this implementation does **not** satisfy a strict total-parameter interpretation of the threshold. The bonus deliverable itself is optional, but the `<0.5B` threshold should not be described as optional when claiming strict compliance. I retained Qwen2.5-0.5B-Instruct as a near-boundary, locally runnable instruction-model POC and disclose the deviation rather than hiding it. A strict replacement would be an instruction model such as `HuggingFaceTB/SmolLM2-360M-Instruct`, with LoRA target modules and hyperparameters revalidated; the leakage-safe data and evaluation pipeline can remain the same.
+**Model-size disclosure:** the assignment asks for a model with **fewer than 0.5B parameters**. Although Qwen markets this checkpoint as “0.5B,” the current Transformers environment counts `630,167,424` base parameters; this LoRA configuration adds `8,798,208`, for `638,965,632` total parameters (`8,798,208` trainable). Therefore, this implementation does **not** satisfy a strict total-parameter interpretation of the threshold. The bonus deliverable itself is optional, but the `<0.5B` threshold should not be described as optional when claiming strict compliance. I retained Qwen2.5-0.5B-Instruct as a near-boundary, locally runnable instruction-model POC and disclose the deviation rather than hiding it. Run 3 is the strict `<0.5B` replacement (`HuggingFaceTB/SmolLM2-360M-Instruct`); the leakage-safe data and evaluation pipeline stayed the same.
 
 ## Layout
 
@@ -16,13 +16,15 @@ src/data/build_jsonl.py    # wave_split + CSVs; short tabular persona; never ful
 src/baselines.py           # random, majority, copy-last (never fills missing with gold)
 src/train.py               # QLoRA SFT; default Qwen2.5-0.5B-Instruct
 src/evaluate.py            # baselines + optional adapter
+tests/test_poc.py          # 7 unit tests
 data/poc/*.jsonl           # generated; not committed
-results/poc*.json          # generated after evaluate; not committed
+runs/<run>/adapter         # PEFT files; sibling bundle_manifest.json; not committed (Run 3 download sits flat under runs/smollm360m_e3/)
+results/<run>/metrics.json # generated after evaluate; not committed
 ```
 
-This POC implements Deliverable 2's **no-copy** condition. Persona = non-overlap CSV fields only (demographics first, capped). One JSONL row = one `(pid, column)`. Person split, seed `20250319`, 70 / 15 / 15. Default slice: **MC only**, 500 train pids × ≤20 items, 100 val/test pids. The random baseline samples uniformly from each column's train-observed answer codes. Copy-last diagnostics live in `diag_*.jsonl`, never in the prompt. Leak check is on the **persona** span: the QID154 stem itself says “70 lawyers”.
+This POC implements Deliverable 2's **no-copy** condition. Persona = non-overlap CSV fields only (demographics first, capped). One JSONL row = one `(pid, column)`. Person split, seed `20250319`, 70 / 15 / 15. Default slice: **MC only**, 500 train pids × ≤20 items, 100 val and 100 test pids (this report scores validation). The random baseline samples uniformly from each column's train-observed answer codes. Copy-last diagnostics live in `diag_*.jsonl`, never in the prompt. Leak check is on the **persona** span: the QID154 stem itself says “70 lawyers”.
 
-Unlike the research-scale D2 pipeline, this POC constructs a safe question payload directly from the catalog's `QuestionText`, `Options`, and `Range`; it does not load and recursively strip `wave4_Q_wave4_A`. It also uses a plain prompt, 2,048-token sequences, and no retrieval. Run 1 used the script defaults (2 epochs, learning rate `2e-4`). Runs 2 and 3 used 3 epochs and `1e-4`. These are explicit POC shortcuts rather than implementations of D2's 7B summary-plus-retrieval recipe.
+Unlike the research-scale D2 pipeline, this POC constructs a safe question payload directly from the catalog's `QuestionText`, `Options`, and `Range`; it does not load and recursively strip `wave4_Q_wave4_A`. It also uses a plain prompt, 2,048-token sequences, and no retrieval. Run 1 used the script defaults (2 epochs, learning rate `2e-4`). Run 2 used 3 epochs and `1e-4`. Run 3 used 4 epochs and `1e-4` (from the Colab `bundle_manifest.json`). These are explicit POC shortcuts rather than implementations of D2's 7B summary-plus-retrieval recipe.
 
 ## Run (from repo root)
 
@@ -44,7 +46,7 @@ python -m src.evaluate --train_jsonl data/poc/examples_train.jsonl --test_jsonl 
 
 - Input condition: `no-copy`
 - Evaluation split: `validation`
-- Training method family: QLoRA 4-bit NF4; LoRA rank 16, alpha 32, dropout 0.05
+- Training method family: QLoRA — 4-bit NF4 base model plus LoRA adapters (rank 16, alpha 32, dropout 0.05)
 - Model/training seed: `42`
 
 ### Data used
@@ -75,11 +77,12 @@ Runs 1 and 2 share the local `data/poc` JSONL, so their baselines match. Run 3 r
 - Bundle ID: `20260921-3e3eaf7`
 - Command: `python -m src.train --train_jsonl data/poc/examples_train.jsonl --val_jsonl data/poc/examples_val.jsonl --out_dir runs/poc --qlora`
 - Base model: `Qwen/Qwen2.5-0.5B-Instruct`
-- Fine-tune: QLoRA 4-bit NF4; LoRA rank 16, alpha 32, dropout 0.05
+- Fine-tune: QLoRA (4-bit NF4 base + LoRA adapters, rank 16, alpha 32, dropout 0.05)
 - Epochs / learning rate: `2` / `2e-4`
 - Training wall time: about `2.5` hours
 - Hardware: NVIDIA GeForce RTX 3060 Laptop GPU, 6 GB VRAM
 - Adapter: `runs/poc/adapter`
+- Source: `results/poc/metrics.json` and `runs/poc/bundle_manifest.json`
 - Uniform random: slice MAD `0.5357`; MC exact match `0.4685`; parse rate `100.00%`; people `100`
 - Train majority: slice MAD `0.5797`; MC exact match `0.5245`; parse rate `100.00%`; people `100`
 - Copy-last / same-pair human benchmark: slice MAD `0.8461`; MC exact match `0.7920`; coverage/parse rate `99.95%`; people `100`
@@ -98,14 +101,16 @@ Runs 1 and 2 share the local `data/poc` JSONL, so their baselines match. Run 3 r
 
 ```text
 python -m src.train --train_jsonl data/poc/examples_train.jsonl --val_jsonl data/poc/examples_val.jsonl --leak_jsonl data/poc/leak_fixture.jsonl --out_dir runs/poc_e3_lr1e4 --epochs 3 --lr 1e-4 --qlora
+python -m src.evaluate --train_jsonl data/poc/examples_train.jsonl --test_jsonl data/poc/examples_val.jsonl --diag_jsonl data/poc/diag_val.jsonl --leak_jsonl data/poc/leak_fixture.jsonl --adapter_dir runs/poc_e3_lr1e4/adapter --out_dir results/poc_e3_lr1e4
 ```
 
 - Base model: `Qwen/Qwen2.5-0.5B-Instruct`
-- Fine-tune: QLoRA 4-bit NF4; LoRA rank 16, alpha 32, dropout 0.05
+- Fine-tune: QLoRA (4-bit NF4 base + LoRA adapters, rank 16, alpha 32, dropout 0.05)
 - Epochs / learning rate: `3` / `1e-4`
 - Training wall time: about `5` hours
 - Hardware: NVIDIA GeForce RTX 3060 Laptop GPU, 6 GB VRAM
 - Adapter: `runs/poc_e3_lr1e4/adapter`
+- Source: `results/poc_e3_lr1e4/metrics.json` and `runs/poc_e3_lr1e4/bundle_manifest.json`
 - Uniform random: slice MAD `0.5357`; MC exact match `0.4685`; parse rate `100.00%`; people `100`
 - Train majority: slice MAD `0.5797`; MC exact match `0.5245`; parse rate `100.00%`; people `100`
 - Copy-last / same-pair human benchmark: slice MAD `0.8461`; MC exact match `0.7920`; coverage/parse rate `99.95%`; people `100`
@@ -114,25 +119,32 @@ python -m src.train --train_jsonl data/poc/examples_train.jsonl --val_jsonl data
 
 > Same validation JSONL as Run 1. This schedule **did** beat random (`0.5411` vs `0.5357`) by a thin margin and stayed below train-majority (`0.5797`). The gain is too small to treat as a research-scale success; D3's stronger follow-up bar is mean-random + 0.01.
 
-#### Run 3 — SmolLM2-360M-Instruct, QLoRA, 3 epochs, lr `1e-4` (Colab T4)
+#### Run 3 — SmolLM2-360M-Instruct, QLoRA, 4 epochs, lr `1e-4` (Colab T4)
 
 - Status: completed
 - Evaluation date: `2026-09-23`
-- Training bundle date: `2026-09-23`
-- Bundle ID: not copied from Colab (`/content/runs/smollm360m_e3/bundle_manifest.json`)
-- Command:
+- Training bundle date: `2026-09-22`
+- Bundle ID: `20260922-3107dfc`
+- Commands run in the Colab session from the repository root (T4 uses fp16 automatically). Epochs below follow `bundle_manifest.json` (`--epochs 4`). Colab shipped `torchao` 0.10.0, which PEFT rejects (it wants >0.16.0); this POC does not use `torchao`, so uninstall it before evaluate:
 
 ```text
-python -m src.train --train_jsonl data/poc/examples_train.jsonl --val_jsonl data/poc/examples_val.jsonl --leak_jsonl data/poc/leak_fixture.jsonl --model_name HuggingFaceTB/SmolLM2-360M-Instruct --out_dir /content/runs/smollm360m_e3 --epochs 3 --lr 1e-4 --qlora
+pip install -r requirements.txt
+pip uninstall -y torchao
+python -m src.data.build_jsonl --out_dir data/poc --poc_train_pids 500 --max_items_per_pid 20
+python -m src.leak_test data/poc/leak_fixture.jsonl data/poc/examples_train.jsonl data/poc/examples_val.jsonl
+python -m src.train --train_jsonl data/poc/examples_train.jsonl --val_jsonl data/poc/examples_val.jsonl --leak_jsonl data/poc/leak_fixture.jsonl --model_name HuggingFaceTB/SmolLM2-360M-Instruct --out_dir /content/runs/smollm360m_e3 --epochs 4 --lr 1e-4 --qlora
+python -m src.evaluate --train_jsonl data/poc/examples_train.jsonl --test_jsonl data/poc/examples_val.jsonl --diag_jsonl data/poc/diag_val.jsonl --leak_jsonl data/poc/leak_fixture.jsonl --adapter_dir /content/runs/smollm360m_e3/adapter --out_dir /content/results/smollm360m_e3
 ```
 
+Train, leak checks, and evaluate for this run were all executed on Colab. Nothing in this run was trained or scored on the local machine. After Colab finished, I copied the outputs to Google Drive and downloaded them: `metrics.json` to `results/smollm360m_e3/`, and the saved adapter plus `bundle_manifest.json` to `runs/smollm360m_e3/`. On Colab the trainer wrote the adapter under `/content/runs/smollm360m_e3/adapter`; the download places those PEFT files directly in `runs/smollm360m_e3/` (`adapter_config.json`, `adapter_model.safetensors`, `tokenizer.json`, `tokenizer_config.json`), with `bundle_manifest.json` beside them. Both `runs/` and `results/` are gitignored, so this download is a local archive, not part of the public repo. JSONL was rebuilt on Colab, so baselines are not identical to Runs 1–2.
+
 - Base model: `HuggingFaceTB/SmolLM2-360M-Instruct`
-- Fine-tune: QLoRA 4-bit NF4; LoRA rank 16, alpha 32, dropout 0.05
-- Epochs / learning rate: `3` / `1e-4`
+- Fine-tune: QLoRA (4-bit NF4 base + LoRA adapters, rank 16, alpha 32, dropout 0.05)
+- Epochs / learning rate: `4` / `1e-4`
 - Training wall time: about `3` hours
 - Hardware: Colab T4
-- Adapter: `/content/runs/smollm360m_e3/adapter`
-- Source: Colab `metrics.json` (JSONL rebuilt on Colab, so baselines are not identical to Run 1)
+- Adapter: trained at `/content/runs/smollm360m_e3/adapter` on Colab; downloaded to `runs/smollm360m_e3` (PEFT files sit in this folder, not under `adapter/`)
+- Source: `results/smollm360m_e3/metrics.json` and `runs/smollm360m_e3/bundle_manifest.json` (Colab → Drive → local download; JSONL rebuilt on Colab, so baselines are not identical to Run 1)
 - Uniform random: slice MAD `0.5256`; MC exact match `0.4545`; parse rate `100.00%`; people `100`
 - Train majority: slice MAD `0.5954`; MC exact match `0.5425`; parse rate `100.00%`; people `100`
 - Copy-last / same-pair human benchmark: slice MAD `0.8565`; MC exact match `0.8045`; coverage/parse rate `99.85%`; people `100`
@@ -143,7 +155,7 @@ python -m src.train --train_jsonl data/poc/examples_train.jsonl --val_jsonl data
 
 ### Interpretation
 
-> All three runs completed with green leakage checks and 100% parse rate. Run 1 (Qwen, 2 epochs / `2e-4`) lost to random. Run 2 (Qwen, 3 epochs / `1e-4`, same local JSONL) is the only schedule that beat random, `0.5411` vs `0.5357`, but it still trailed train-majority and missed D3's stronger +0.01 follow-up margin. Run 3 (SmolLM2-360M on Colab) lost to random. The POC loop works; none of these tiny-model slices is a candidate for research-scale promotion.
+> All three runs completed with green leakage checks and 100% parse rate. Ranked by LoRA slice MAD, Run 2 is highest (`0.5411`), then Run 1 (`0.5274`), then Run 3 (`0.4775`). The same order holds against each run's own random baseline: Run 2 `+0.0054`, Run 1 `−0.0083`, Run 3 `−0.0481`. Run 2 is the only schedule that beat random, but it still trailed train-majority and missed D3's stronger +0.01 follow-up margin. Run 3 rebuilt JSONL on Colab, so its absolute MAD is not a paired comparison with Runs 1–2; even so, it is the weakest of the three against its own random and majority scores. That gap is consistent with the smaller SmolLM2-360M base, not with T4 versus the 3060. The POC loop works; none of these tiny-model slices is a candidate for research-scale promotion.
 
 These are validation-slice results using train-only empirical ranges. They are not the official 17-task MAD score, do not include participant-bootstrap confidence intervals, and must not be compared directly with the paper's published **81.72%** human result. Copy-last is an empirical same-pair test–retest benchmark, not a mathematical upper bound.
 
@@ -153,12 +165,20 @@ Hardware note: Runs 1–2 used an NVIDIA GeForce RTX 3060 Laptop GPU with 6 GB V
 
 If leak test is red, do not print a score table. If slice MAD > copy-last/ceiling, treat it as a leak alarm, not SOTA.
 
+### Discussion
+
+**Observation**: larger models appear to predict better on this slice: both Qwen2.5-0.5B-Instruct runs outscored SmolLM2-360M-Instruct, including when each run is compared with its own random baseline. More training epochs also appear to help within the Qwen pair: the 3-epoch / `1e-4` schedule (Run 2) beat the 2-epoch / `2e-4` schedule (Run 1).
+
+**These are initial observations only**. The three runs are not a controlled ablation — Run 2 also changed the learning rate, and Run 3 used a different base model, rebuilt JSONL, different hardware, and 4 epochs. Establishing either pattern with higher confidence would require more matched experiments and the stronger Deliverable 3 benchmarks (locked test, more seeds, participant-bootstrap intervals).
+
+## Future work
+
+With more time I would keep this leakage-safe slice fixed and test the Discussion observations under cleaner conditions. Next steps on the prototype:
+
+1. Test larger instruction models such as 1.5B, 7B, or bigger if hardware allows, on the same JSONL, seeds, and QLoRA recipe.
+2. Compare frozen-prompt / prompt-engineering baselines with QLoRA fine-tuning, and with the combination, before treating fine-tuning as the default.
+3. Score the same slice with the official 17-task MAD script and participant-bootstrap intervals. A win over train-majority would count only if that paired interval stayed above zero.
+
 ## Deps (POC)
 
-`transformers` `peft` `accelerate` `bitsandbytes` `datasets` `pandas` `torch` — see `requirements.txt`. If `HF_HOME` is unset, the builder uses `data_raw/.cache/huggingface` when that folder exists.
-
-Colab may ship an old `torchao` that PEFT rejects (`Found version 0.10.0, but only versions above 0.16.0 are supported`). This POC does not use `torchao`. Uninstall it, then rerun evaluate:
-
-```text
-pip uninstall -y torchao
-```
+`transformers` `peft` `accelerate` `bitsandbytes` `datasets` `pandas` `torch` — see `requirements.txt`. If `HF_HOME` is unset, the builder uses `data_raw/.cache/huggingface` when that folder exists. On Colab, uninstall the stock `torchao` as in the Run 3 commands.

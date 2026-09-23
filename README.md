@@ -1,6 +1,6 @@
-# Large Behavior Model on Twin-2K-500
+# Take-Home: Building a Large Behavior Model on Twin-2K-500
 
-This repository is my solution to the **Research Engineer Take-Home Assignment**. It analyzes the Twin-2K-500 longitudinal survey and proposes a Large Behavior Model (LBM) that predicts a participant's held-out wave-4 responses from information collected in waves 1–3.
+This repository is my submission for the **Research Engineer Take-Home Assignment**. It is a design-and-reasoning package plus a small bonus prototype, not a production behavior model. It analyzes the Twin-2K-500 longitudinal survey and proposes a Large Behavior Model (LBM) for the dataset's natural task: predict a participant's held-out wave-4 responses from information collected in waves 1–3.
 
 The main design constraint is temporal data integrity: a wave-4 answer must never enter the model input used to predict that answer. The research plan reports two input conditions separately:
 
@@ -41,12 +41,17 @@ Deliverables 2–5 describe a research-scale system. Deliverable 6 is intentiona
 │   └── data_exploration.ipynb         # EDA supporting Deliverable 1
 │
 ├── src/
+│   ├── __init__.py
 │   ├── data/
+│   │   ├── __init__.py
 │   │   └── build_jsonl.py             # Build person-split, leakage-safe POC JSONL
 │   ├── baselines.py                   # Random, train-majority, and copy-last baselines
 │   ├── leak_test.py                   # Prompt-level leakage checks
 │   ├── train.py                       # QLoRA SFT; default Qwen2.5-0.5B-Instruct
 │   └── evaluate.py                    # Slice evaluation and optional adapter inference
+│
+├── tests/
+│   └── test_poc.py                    # 7 unit tests in 4 groups: scoring, baseline, leakage, split
 │
 ├── data/
 │   ├── wave4_response.csv             # Wave-4 numeric responses
@@ -60,29 +65,31 @@ Deliverables 2–5 describe a research-scale system. Deliverable 6 is intentiona
 └── results/                           # Generated notebook/POC outputs; ignored by Git
 ```
 
-Additional top-level scripts and documents are source-inspection or earlier reference artifacts; the submission path is the `docs/`, `notebooks/`, and `src/` structure above.
+The submission path is `docs/`, `notebooks/`, `src/`, and `tests/`. Generated JSONL, adapters, and metrics stay under `data/poc/`, `runs/`, and `results/` and are ignored by Git.
 
 ## Setup
 
-Use Python 3.10 or a compatible environment:
+Use Python 3.10 in a conda environment:
 
 ```bash
-python -m venv .venv
-.venv\Scripts\activate
+conda create -n Amity_Assignment python=3.10 -y
+conda activate Amity_Assignment
 python -m pip install -r requirements.txt
 ```
 
-CUDA-enabled PyTorch is required for GPU training. Data preparation, leakage tests, and non-model baselines can run without a GPU.
+`requirements.txt` lists `torch` but does not pin a CUDA wheel. After the commands above, install a CUDA build from [https://pytorch.org/get-started/locally/](https://pytorch.org/get-started/locally/) that matches this machine. The local POC used PyTorch `2.14.0+cu126`; pick the equivalent wheel for Linux, Windows, or Colab. A CUDA 12.6 example is:
+
+```bash
+python -m pip install torch --index-url https://download.pytorch.org/whl/cu126
+```
+
+A pip wheel is enough; a full CUDA Toolkit is not required. `--qlora` needs a CUDA GPU and `bitsandbytes`. Data preparation, leakage tests, unit tests, and non-model baselines can run on CPU.
 
 ## Reproduce Deliverable 1
 
-Open and run:
+Open [`notebooks/data_exploration.ipynb`](notebooks/data_exploration.ipynb) in Jupyter, VS Code, or Cursor and run all cells. Select the `Amity_Assignment` conda kernel so the notebook uses the environment from Setup.
 
-```text
-notebooks/data_exploration.ipynb
-```
-
-The notebook loads the Twin-2K-500 Hugging Face dataset and writes generated tables or exports under `results/`.
+The notebook loads the Twin-2K-500 Hugging Face dataset on first run (internet required) and writes generated tables or exports under `results/`.
 
 ## Run the bonus POC
 
@@ -96,6 +103,12 @@ python -m src.train --train_jsonl data/poc/examples_train.jsonl --val_jsonl data
 python -m src.evaluate --train_jsonl data/poc/examples_train.jsonl --test_jsonl data/poc/examples_val.jsonl --diag_jsonl data/poc/diag_val.jsonl --leak_jsonl data/poc/leak_fixture.jsonl --adapter_dir runs/poc/adapter --out_dir results/poc
 ```
 
-The POC implements the **no-copy** condition. It uses non-overlapping waves 1–3 fields for the persona, keeps copy-last data in diagnostic files only, and never loads `full_persona` for model prompts.
+The first `build_jsonl` run downloads Twin-2K-500 catalog and CSV files from Hugging Face (internet required). The POC implements the **no-copy** condition. It uses non-overlapping waves 1–3 fields for the persona, keeps copy-last data in diagnostic files only, and never loads `full_persona` for model prompts.
 
-The reported runs are a local Qwen2.5-0.5B-Instruct schedule, a longer lower-LR Qwen schedule, and a Colab `SmolLM2-360M-Instruct` run that meets a strict `<0.5B` reading. The POC reports slice-level mean absolute deviation (MAD) accuracy using train-only empirical ranges. It is not a reproduction of the official 17-task paper evaluation. See [`docs/06_poc.md`](docs/06_poc.md) for the three-run table, hardware notes, and interpretation rules.
+The reported runs are a local Qwen2.5-0.5B-Instruct schedule, a longer lower-LR Qwen schedule, and a Colab `SmolLM2-360M-Instruct` run that meets a strict `<0.5B` reading. The POC reports slice-level MAD accuracy, defined as one minus the absolute error divided by the train-only empirical range. Higher is better. It is not a reproduction of the official 17-task paper evaluation. See [`docs/06_poc.md`](docs/06_poc.md) for the three-run table, hardware notes, and interpretation rules.
+
+## Further work
+
+The research-scale priorities are in [`docs/02_model_plan.md`](docs/02_model_plan.md) §8: compare 1.5B, 7B, and 14B on the same persona and retrieval pipeline, train a supervised retriever, test task-specific adapters, calibrate abstention, and measure drift on a later wave than this short retest.
+
+For the POC, I would score the same leakage-safe slice with the official 17-task script and participant-bootstrap intervals. A strict `<0.5B` gain over train-majority would count only if that paired interval stayed above zero.

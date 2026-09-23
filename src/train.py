@@ -1,4 +1,4 @@
-"""LoRA-SFT on the POC JSONL. Hyperparameters: docs/02_model_plan.md §2.5.
+"""LoRA-SFT on the POC JSONL. Hyperparameters: docs/02_model_plan.md §5.
 
     python -m src.train --train_jsonl data/poc/examples_train.jsonl --val_jsonl data/poc/examples_val.jsonl --out_dir runs/poc --qlora
 """
