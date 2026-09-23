@@ -103,7 +103,15 @@ python -m src.train --train_jsonl data/poc/examples_train.jsonl --val_jsonl data
 python -m src.evaluate --train_jsonl data/poc/examples_train.jsonl --test_jsonl data/poc/examples_val.jsonl --diag_jsonl data/poc/diag_val.jsonl --leak_jsonl data/poc/leak_fixture.jsonl --adapter_dir runs/poc/adapter --out_dir results/poc
 ```
 
-Reported JSONL, final adapters, and `metrics.json` are in the repo. To inspect scores, open `results/*/metrics.json`. To re-score without retraining, skip `build_jsonl` and `train` and run evaluate against the matching `runs/<run>/adapter`. Rebuilding JSONL still needs Hugging Face (internet). The POC implements the **no-copy** condition. It uses non-overlapping waves 1–3 fields for the persona, keeps copy-last data in diagnostic files only, and never loads `full_persona` for model prompts.
+Reported JSONL, final adapters, and `metrics.json` are in the repo. A reviewer does **not** need to train. To inspect scores, open `results/*/metrics.json`. To re-run tests and evaluate:
+
+```bash
+python -m unittest discover -s tests
+python -m src.leak_test data/poc/leak_fixture.jsonl data/poc/examples_train.jsonl data/poc/examples_val.jsonl
+python -m src.evaluate --train_jsonl data/poc/examples_train.jsonl --test_jsonl data/poc/examples_val.jsonl --diag_jsonl data/poc/diag_val.jsonl --leak_jsonl data/poc/leak_fixture.jsonl --adapter_dir runs/poc/adapter --out_dir results/poc
+```
+
+Use `--adapter_dir runs/poc_e3_lr1e4/adapter --out_dir results/poc_e3_lr1e4` for Run 2, or `--adapter_dir runs/smollm360m_e3/adapter --out_dir results/smollm360m_e3` for Run 3. Evaluate still downloads the base model from Hugging Face (internet) and is much faster on GPU; CPU works but is slow. Run 3's published scores used JSONL rebuilt on Colab, so a local re-score of that adapter on `data/poc` will be close but not identical. The POC implements the **no-copy** condition. It uses non-overlapping waves 1–3 fields for the persona, keeps copy-last data in diagnostic files only, and never loads `full_persona` for model prompts.
 
 The reported runs are a local Qwen2.5-0.5B-Instruct schedule, a longer lower-LR Qwen schedule, and a Colab `SmolLM2-360M-Instruct` run that meets a strict `<0.5B` reading. The POC reports slice-level MAD accuracy, defined as one minus the absolute error divided by the train-only empirical range. Higher is better. It is not a reproduction of the official 17-task paper evaluation. See [`docs/06_poc.md`](docs/06_poc.md) for the three-run table, hardware notes, and interpretation rules.
 
